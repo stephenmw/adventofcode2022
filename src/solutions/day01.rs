@@ -1,10 +1,7 @@
 use crate::solutions::prelude::*;
 
 pub fn problem1<'a>(input: &'a str) -> Result<String, anyhow::Error> {
-    let data = parser::parse(input)
-        .map_err(|x| x.to_owned())
-        .context("failed to parse input")?
-        .1;
+    let data = parse!(input);
 
     data.iter()
         .map(|x| x.iter().sum::<usize>())
@@ -14,10 +11,7 @@ pub fn problem1<'a>(input: &'a str) -> Result<String, anyhow::Error> {
 }
 
 pub fn problem2(input: &str) -> Result<String, anyhow::Error> {
-    let data = parser::parse(input)
-        .map_err(|x| x.to_owned())
-        .context("failed to parse input")?
-        .1;
+    let data = parse!(input);
 
     let mut counts: Vec<_> = data.iter().map(|x| x.iter().sum::<usize>()).collect();
     counts.sort_unstable();

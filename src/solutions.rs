@@ -42,8 +42,18 @@ pub struct Solution {
     pub input: &'static str,
 }
 
+#[macro_use]
 mod prelude {
     pub use anyhow::{anyhow, bail, Context};
+
+    macro_rules! parse {
+        ($input:expr) => {
+            parser::parse($input)
+                .map_err(|x| x.to_owned())
+                .context("failed to parse input")?
+                .1
+        };
+    }
 }
 
 days!(day01);

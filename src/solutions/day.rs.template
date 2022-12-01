@@ -1,7 +1,7 @@
 use crate::solutions::prelude::*;
 
 pub fn problem1<'a>(input: &'a str) -> Result<String, anyhow::Error> {
-    //let data = parser::parse(input).map_err(|x| x.to_owned()).context("failed to parse input")?;
+    let data = parse!(input);
     todo!()
 }
 
