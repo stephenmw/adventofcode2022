@@ -1,3 +1,5 @@
+use crate::solutions::prelude::*;
+
 use std::collections::HashSet;
 
 pub fn problem1<'a>(input: &'a str) -> Result<String, anyhow::Error> {
@@ -21,30 +23,30 @@ pub fn problem2(input: &str) -> Result<String, anyhow::Error> {
         .map(|x| HashSet::<char>::from_iter(x.chars()))
         .collect();
 
-    let items = sacks
-        .chunks_exact(3)
-        .map(|x| find_intersection(&x[0], &x[1], &x[2]));
+    let items = sacks.chunks_exact(3).map(|x| {
+        find_intersection(&x[0], &x[1], &x[2]).ok_or(anyhow!("group with no intersection"))
+    });
 
-    let ans = items.map(|x| priority(x)).sum::<u32>();
-
-    Ok(ans.to_string())
+    items
+        .map(|x| x.map(priority))
+        .try_fold(0, |acc, x| Ok(acc + x?))
+        .map(|x| x.to_string())
 }
 
-fn find_intersection(a: &HashSet<char>, b: &HashSet<char>, c: &HashSet<char>) -> char {
+fn find_intersection(a: &HashSet<char>, b: &HashSet<char>, c: &HashSet<char>) -> Option<char> {
     a.intersection(b)
         .cloned()
         .collect::<HashSet<char>>()
         .intersection(c)
         .cloned()
         .next()
-        .unwrap()
 }
 
 fn priority(c: char) -> u32 {
     match c {
         'a'..='z' => c as u32 - 'a' as u32 + 1,
         'A'..='Z' => 27 + c as u32 - 'A' as u32,
-        _ => panic!("unexpected char"),
+        _ => 0,
     }
 }
 
