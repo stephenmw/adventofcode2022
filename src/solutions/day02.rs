@@ -1,6 +1,6 @@
 use crate::solutions::prelude::*;
 
-pub fn problem1<'a>(input: &'a str) -> Result<String, anyhow::Error> {
+pub fn problem1(input: &str) -> Result<String, anyhow::Error> {
     let data = parse!(input);
 
     let ans = data

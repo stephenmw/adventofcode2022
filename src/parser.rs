@@ -22,6 +22,7 @@ pub fn uint<T: FromStr>(input: &str) -> IResult<&str, T> {
     parser(input)
 }
 
+#[allow(dead_code)]
 pub fn int<T: FromStr>(input: &str) -> IResult<&str, T> {
     let digits = is_a("0123456789");
     let num = tuple((opt(tag("-")), digits));

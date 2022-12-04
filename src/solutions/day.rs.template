@@ -1,6 +1,6 @@
 use crate::solutions::prelude::*;
 
-pub fn problem1<'a>(input: &'a str) -> Result<String, anyhow::Error> {
+pub fn problem1(input: &str) -> Result<String, anyhow::Error> {
     let data = parse!(input);
     todo!()
 }
@@ -10,6 +10,7 @@ pub fn problem2(_input: &str) -> Result<String, anyhow::Error> {
 }
 
 mod parser {
+    use super::*;
     use crate::parser::prelude::*;
 
     pub fn parse(input: &str) -> IResult<&str, ()> {
