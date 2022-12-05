@@ -3,7 +3,7 @@ use crate::solutions::prelude::*;
 pub fn problem1(input: &str) -> Result<String, anyhow::Error> {
     let (mut layout, moves) = parse!(input);
     for m in moves {
-        layout.move_9000(m);
+        layout.move_9000(m).context("bad move")?;
     }
 
     Ok(layout.top())
@@ -12,7 +12,7 @@ pub fn problem1(input: &str) -> Result<String, anyhow::Error> {
 pub fn problem2(input: &str) -> Result<String, anyhow::Error> {
     let (mut layout, moves) = parse!(input);
     for m in moves {
-        layout.move_9001(m);
+        layout.move_9001(m).context("bad move")?;
     }
 
     Ok(layout.top())
@@ -31,23 +31,44 @@ pub struct Layout {
 }
 
 impl Layout {
-    fn move_9000(&mut self, m: Move) {
+    fn move_9000(&mut self, m: Move) -> anyhow::Result<()> {
         for _ in 0..m.count {
-            let val = self.crates[m.from].pop().unwrap();
-            self.crates[m.to].push(val);
+            let val = self
+                .crates
+                .get_mut(m.from)
+                .ok_or(anyhow!("from out of range"))?
+                .pop()
+                .ok_or(anyhow!("not enough values in column"))?;
+            self.crates
+                .get_mut(m.to)
+                .ok_or(anyhow!("to out of range"))?
+                .push(val);
         }
+
+        Ok(())
     }
 
-    fn move_9001(&mut self, m: Move) {
+    fn move_9001(&mut self, m: Move) -> anyhow::Result<()> {
         let mut stack = Vec::new();
+
         for _ in 0..m.count {
-            let val = self.crates[m.from].pop().unwrap();
+            let val = self
+                .crates
+                .get_mut(m.from)
+                .ok_or(anyhow!("from out of range"))?
+                .pop()
+                .ok_or(anyhow!("not enough values in column"))?;
             stack.push(val);
         }
 
         while let Some(v) = stack.pop() {
-            self.crates[m.to].push(v);
+            self.crates
+                .get_mut(m.to)
+                .ok_or(anyhow!("to out of range"))?
+                .push(v);
         }
+
+        Ok(())
     }
 
     fn top(&self) -> String {
@@ -93,17 +114,20 @@ mod parser {
         let numbers_line = many1(delimited(space0, uint::<usize>, space0));
         let layout = separated_pair(crate_lines, line_ending, numbers_line);
 
-        let mut parser = map(layout, |(lines, numbers)| {
+        let mut parser = map_res(layout, |(lines, numbers)| {
             let num_columns = numbers.len();
-            let mut crates = vec![vec![]; num_columns];
+            let mut crates = vec![Vec::new(); num_columns];
             for l in lines.iter().rev() {
                 for (i, v) in l.iter().enumerate() {
                     if let Some(val) = v {
-                        crates[i].push(*val);
+                        crates
+                            .get_mut(i)
+                            .ok_or(anyhow!("invalid input: too many crates on a line"))?
+                            .push(*val);
                     }
                 }
             }
-            Layout { crates }
+            Ok::<_, anyhow::Error>(Layout { crates })
         });
 
         parser(input)
