@@ -1,9 +1,11 @@
 use crate::solutions::prelude::*;
 
+use std::cmp::Ordering;
+
 pub fn problem1(input: &str) -> Result<String, anyhow::Error> {
     let (mut layout, moves) = parse!(input);
-    for m in moves {
-        layout.move_9000(m).context("bad move")?;
+    for m in &moves {
+        layout.apply_move(m, true).context("bad move")?;
     }
 
     Ok(layout.top())
@@ -11,8 +13,8 @@ pub fn problem1(input: &str) -> Result<String, anyhow::Error> {
 
 pub fn problem2(input: &str) -> Result<String, anyhow::Error> {
     let (mut layout, moves) = parse!(input);
-    for m in moves {
-        layout.move_9001(m).context("bad move")?;
+    for m in &moves {
+        layout.apply_move(m, false).context("bad move")?;
     }
 
     Ok(layout.top())
@@ -31,52 +33,46 @@ pub struct Layout {
 }
 
 impl Layout {
-    fn move_9000(&mut self, m: Move) -> anyhow::Result<()> {
-        for _ in 0..m.count {
-            let val = self
-                .crates
-                .get_mut(m.from)
-                .ok_or(anyhow!("from out of range"))?
-                .pop()
-                .ok_or(anyhow!("not enough values in column"))?;
-            self.crates
-                .get_mut(m.to)
-                .ok_or(anyhow!("to out of range"))?
-                .push(val);
+    fn apply_move(&mut self, m: &Move, reverse: bool) -> anyhow::Result<()> {
+        if m.to.max(m.from) >= self.crates.len() {
+            bail!("invalid column");
         }
 
-        Ok(())
-    }
-
-    fn move_9001(&mut self, m: Move) -> anyhow::Result<()> {
-        let mut stack = Vec::new();
-
-        for _ in 0..m.count {
-            let val = self
-                .crates
-                .get_mut(m.from)
-                .ok_or(anyhow!("from out of range"))?
-                .pop()
-                .ok_or(anyhow!("not enough values in column"))?;
-            stack.push(val);
+        if m.to == m.from {
+            bail!("the source and destination of a crate cannot be the same");
         }
 
-        while let Some(v) = stack.pop() {
-            self.crates
-                .get_mut(m.to)
-                .ok_or(anyhow!("to out of range"))?
-                .push(v);
+        let (to, from) = get_dual_mut(&mut self.crates, m.to, m.from);
+
+        let start = from
+            .len()
+            .checked_sub(m.count)
+            .ok_or(anyhow!("not enough crates in column"))?;
+
+        let to_move = from.drain(start..);
+
+        if reverse {
+            to.extend(to_move.rev());
+        } else {
+            to.extend(to_move);
         }
 
         Ok(())
     }
 
     fn top(&self) -> String {
-        self.crates
-            .iter()
-            .filter_map(|x| x.last())
-            .cloned()
-            .collect()
+        self.crates.iter().filter_map(|x| x.last()).collect()
+    }
+}
+
+// This function gets mutable elements from two distinct indexes of a slice.
+fn get_dual_mut<T>(s: &mut [T], i: usize, j: usize) -> (&mut T, &mut T) {
+    let (a, b) = s.split_at_mut(i.max(j));
+
+    match i.cmp(&j) {
+        Ordering::Less => (&mut a[i], &mut b[0]),
+        Ordering::Equal => panic!("cannot get two pointers to the same index"),
+        Ordering::Greater => (&mut b[0], &mut a[j]),
     }
 }
 
