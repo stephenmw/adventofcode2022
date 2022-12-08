@@ -12,7 +12,7 @@ pub mod prelude {
         error::ParseError,
         multi::{count, many1, separated_list1},
         sequence::{delimited, pair, preceded, separated_pair, terminated, tuple},
-        IResult, Parser,
+        AsChar, IResult, InputTakeAtPosition, Parser,
     };
 
     pub use super::{complete, int, uint};
