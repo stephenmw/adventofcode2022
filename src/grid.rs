@@ -13,13 +13,17 @@ impl<T> Grid<T> {
         self.cells.get(p.y)?.get(p.x)
     }
 
-    pub fn get_mut(&mut self, p: Point) -> Option<&mut T> {
-        self.cells.get_mut(p.y)?.get_mut(p.x)
-    }
-
-    pub fn iter(&self) -> impl Iterator<Item = Point> {
+    pub fn iter_points(&self) -> impl Iterator<Item = Point> {
         let (x_len, y_len) = self.size();
         (0..y_len).flat_map(move |y| (0..x_len).map(move |x| Point::new(x, y)))
+    }
+
+    pub fn iter_line(&self, start: Point, d: Direction) -> impl Iterator<Item = (Point, &T)> {
+        LineIterator {
+            g: self,
+            p: Some(start),
+            d,
+        }
     }
 
     pub fn size(&self) -> (usize, usize) {
@@ -30,6 +34,24 @@ impl<T> Grid<T> {
 impl<T> From<Vec<Vec<T>>> for Grid<T> {
     fn from(cells: Vec<Vec<T>>) -> Self {
         Self::new(cells)
+    }
+}
+
+struct LineIterator<'a, T> {
+    g: &'a Grid<T>,
+    p: Option<Point>,
+    d: Direction,
+}
+
+impl<'a, T> Iterator for LineIterator<'a, T> {
+    type Item = (Point, &'a T);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let cur = self.p?;
+        let ret = self.g.get(cur)?;
+        self.p = cur.next(self.d);
+
+        Some((cur, ret))
     }
 }
 

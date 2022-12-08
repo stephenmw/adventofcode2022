@@ -1,117 +1,93 @@
 use crate::grid::{Direction, Grid, Point};
 use crate::solutions::prelude::*;
 
+use std::collections::HashSet;
+
 pub fn problem1(input: &str) -> Result<String, anyhow::Error> {
-    let data = input.lines().map(line_to_row).collect::<Vec<_>>();
-    let mut grid = Grid::new(data);
+    let grid = parse!(input);
+    let mut visible = HashSet::new();
 
     for i in 0..grid.cells.len() {
         let left = Point::new(0, i);
         let right = Point::new(grid.cells[i].len() - 1, i);
 
-        println!("lr: {:?}, {:?}", left, right);
-
-        mark_visible(&mut grid, left, Direction::Right);
-        mark_visible(&mut grid, right, Direction::Left);
+        mark_visible(&mut visible, &grid, left, Direction::Right);
+        mark_visible(&mut visible, &grid, right, Direction::Left);
     }
 
     for i in 0..grid.cells[0].len() {
         let bottom = Point::new(i, 0);
         let top = Point::new(i, grid.cells.len() - 1);
 
-        println!("bt: {:?}, {:?}", bottom, top);
-
-        mark_visible(&mut grid, bottom, Direction::Up);
-        mark_visible(&mut grid, top, Direction::Down);
+        mark_visible(&mut visible, &grid, bottom, Direction::Up);
+        mark_visible(&mut visible, &grid, top, Direction::Down);
     }
 
-    let ans = grid
-        .cells
-        .iter()
-        .flat_map(|x| x.iter())
-        .filter(|x| x.visible)
-        .count();
-
-    Ok(ans.to_string())
+    Ok(visible.len().to_string())
 }
 
 pub fn problem2(input: &str) -> Result<String, anyhow::Error> {
-    let data = input.lines().map(line_to_row).collect::<Vec<_>>();
-    let grid = Grid::new(data);
+    let grid = parse!(input);
 
-    let ans = grid.iter().map(|p| scenic_score(&grid, p)).max().unwrap();
+    let ans = grid
+        .iter_points()
+        .map(|p| scenic_score(&grid, p))
+        .max()
+        .unwrap();
+
     Ok(ans.to_string())
 }
 
-fn scenic_score(grid: &Grid<GridValue>, p: Point) -> usize {
-    let height = grid.get(p).unwrap().height;
+fn scenic_score(grid: &Grid<u8>, p: Point) -> usize {
+    let height = *grid.get(p).unwrap();
     Direction::iter()
-        .map(|d| count_available(grid, p, height, d))
+        .map(|d| count_line(grid, p, height, d))
         .product()
 }
 
-fn count_available(grid: &Grid<GridValue>, start: Point, h: u32, d: Direction) -> usize {
-    let mut cur = start;
-    let mut ret = 0;
+fn count_line(grid: &Grid<u8>, start: Point, h: u8, d: Direction) -> usize {
+    let Some(next) = start.next(d) else {return 0};
 
-    while let Some(p) = cur.next(d) {
-        cur = p;
-
-        let cell = match grid.get(cur) {
-            Some(x) => x,
-            None => break,
-        };
-
-        ret += 1;
-        if cell.height >= h {
-            break;
-        }
-    }
-
-    ret
-}
-
-fn mark_visible(grid: &mut Grid<GridValue>, start: Point, d: Direction) {
-    let start_cell = grid.get_mut(start).unwrap();
-    let mut max_height = start_cell.height;
-    start_cell.visible = true;
-
-    let mut cur = start;
-    while let Some(p) = cur.next(d) {
-        cur = p;
-        let cell = match grid.get_mut(cur) {
-            Some(x) => x,
-            None => break,
-        };
-        if cell.height > max_height {
-            cell.visible = true;
-            max_height = cell.height;
-        }
-    }
-}
-
-fn line_to_row(l: &str) -> Vec<GridValue> {
-    l.chars()
-        .filter_map(|x| {
-            Some(GridValue {
-                height: x.to_digit(10)?,
-                visible: false,
-            })
+    grid.iter_line(next, d)
+        .scan(false, |seen, (_, x)| {
+            if !*seen {
+                if *x >= h {
+                    *seen = true;
+                }
+                Some(x)
+            } else {
+                None
+            }
         })
-        .collect()
+        .count()
 }
 
-struct GridValue {
-    height: u32,
-    visible: bool,
+fn mark_visible(visible: &mut HashSet<Point>, grid: &Grid<u8>, start: Point, d: Direction) {
+    let mut cells = grid.iter_line(start, d);
+
+    let Some((first_point, &first_height)) = cells.next() else {return};
+    let mut max_height = first_height;
+    visible.insert(first_point);
+
+    for (p, &h) in cells {
+        if h > max_height {
+            visible.insert(p);
+            max_height = h;
+        }
+    }
 }
 
 mod parser {
-    use super::*;
+    use crate::grid::Grid;
     use crate::parser::prelude::*;
 
-    pub fn parse(input: &str) -> IResult<&str, ()> {
-        unimplemented!()
+    pub fn parse(input: &str) -> IResult<&str, Grid<u8>> {
+        let digit = map(one_of::<_, _, nom::error::Error<_>>("0123456789"), |c| {
+            c.to_digit(10).unwrap() as u8
+        });
+        let row = many1(digit);
+        let grid = into(separated_list1(line_ending, row));
+        complete(grid)(input)
     }
 }
 
