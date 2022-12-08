@@ -1,3 +1,4 @@
+mod grid;
 mod parser;
 mod solutions;
 #[macro_use]
