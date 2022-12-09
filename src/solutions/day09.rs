@@ -5,24 +5,16 @@ use std::collections::HashSet;
 
 pub fn problem1(input: &str) -> Result<String, anyhow::Error> {
     let instructions = parse!(input);
-
-    let mut state = State::<2>::default();
-    let mut tail_locations = HashSet::new();
-
-    for inst in instructions {
-        for _ in 0..inst.steps {
-            state.step(inst.direction);
-            tail_locations.insert(state.tail());
-        }
-    }
-
-    Ok(tail_locations.len().to_string())
+    Ok(num_tail_locations(&instructions, 2).to_string())
 }
 
 pub fn problem2(input: &str) -> Result<String, anyhow::Error> {
     let instructions = parse!(input);
+    Ok(num_tail_locations(&instructions, 10).to_string())
+}
 
-    let mut state = State::<10>::default();
+fn num_tail_locations(instructions: &[Instruction], rope_length: usize) -> usize {
+    let mut state = State::new(rope_length);
     let mut tail_locations = HashSet::new();
 
     for inst in instructions {
@@ -32,7 +24,7 @@ pub fn problem2(input: &str) -> Result<String, anyhow::Error> {
         }
     }
 
-    Ok(tail_locations.len().to_string())
+    tail_locations.len()
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Hash, Ord, PartialOrd)]
@@ -56,12 +48,18 @@ impl Point {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
-struct State<const N: usize> {
-    knots: [Point; N],
+#[derive(Clone, Debug)]
+struct State {
+    knots: Vec<Point>,
 }
 
-impl<const N: usize> State<N> {
+impl State {
+    fn new(n: usize) -> Self {
+        State {
+            knots: vec![Point::default(); n],
+        }
+    }
+
     fn step(&mut self, d: Direction) {
         fn step_next_knot(prev: Point, mut next: Point) -> Point {
             let move_x = prev.x.abs_diff(next.x) > 1;
@@ -87,7 +85,8 @@ impl<const N: usize> State<N> {
             next
         }
 
-        self.knots[0] = self.knots[0].next(d);
+        let Some(head) = self.knots.first_mut() else {return};
+        *head = head.next(d);
 
         for i in 1..self.knots.len() {
             let prev = self.knots[i - 1];
@@ -99,14 +98,6 @@ impl<const N: usize> State<N> {
 
     fn tail(&self) -> Point {
         self.knots[self.knots.len() - 1]
-    }
-}
-
-impl<const N: usize> Default for State<N> {
-    fn default() -> Self {
-        State {
-            knots: [Point::default(); N],
-        }
     }
 }
 
