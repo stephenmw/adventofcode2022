@@ -152,48 +152,42 @@ mod parser {
 
     pub fn parse(input: &str) -> IResult<&str, Vec<CommandBlock>> {
         let command_block = alt((cd, ls));
-        let blocks = separated_list1(line_ending, command_block);
-        complete(blocks)(input)
+        let blocks = many1(command_block);
+        ws_all_consuming(blocks)(input)
     }
 
     fn cd(input: &str) -> IResult<&str, CommandBlock> {
-        map(delimited(tag("$ cd "), location, space0), |loc| {
-            CommandBlock::Cd { loc }
-        })(input)
+        let prefix = tuple((tag("$"), space0, tag("cd"), space1));
+        let block = preceded(prefix, location).map(|loc| CommandBlock::Cd { loc });
+        ws_line(block)(input)
     }
 
     fn ls(input: &str) -> IResult<&str, CommandBlock> {
-        let cmd_line = tag("$ ls");
-        let dir_line = map(preceded(tag("dir "), filename), |d| {
-            DirRecord::Dir(d.to_owned())
-        });
-        let file_line = map(separated_pair(uint, space1, filename), |(s, f)| {
-            DirRecord::File(f.to_owned(), s)
-        });
+        let cmd_line = tuple((tag("$"), space0, tag("ls")));
+        let dir_line = preceded(pair(tag("dir"), space1), filename)
+            .map(|name| DirRecord::Dir(name.to_owned()));
+        let file_line = separated_pair(uint, space1, filename)
+            .map(|(size, name)| DirRecord::File(name.to_owned(), size));
 
         let record = alt((dir_line, file_line));
-        let records = separated_list1(line_ending, record);
+        let records = many1(ws_line(record));
 
-        let mut block = map(
-            separated_pair(cmd_line, line_ending, records),
-            |(_, records)| CommandBlock::Ls { records },
-        );
-
-        block(input)
+        preceded(ws_line(cmd_line), records)
+            .map(|records| CommandBlock::Ls { records })
+            .parse(input)
     }
 
     fn location(input: &str) -> IResult<&str, Location> {
-        let root = value(Location::Root, tag("/"));
-        let parent = value(Location::Parent, tag(".."));
-        let dir = map(filename, |f| Location::Directory(f.to_owned()));
-        alt((root, parent, dir))(input)
+        alt((
+            value(Location::Root, tag("/")),
+            value(Location::Parent, tag("..")),
+            filename.map(|f| Location::Directory(f.to_owned())),
+        ))(input)
     }
 
     fn filename(input: &str) -> IResult<&str, &str> {
-        input.split_at_position1_complete(
-            |item| !(item.is_alphanum() || item == '.'),
-            nom::error::ErrorKind::AlphaNumeric,
-        )
+        let f = many1_count(alt((alphanumeric1, tag("."))));
+        recognize(f)(input)
     }
 }
 
@@ -201,29 +195,31 @@ mod parser {
 mod tests {
     use super::*;
 
-    const EXAMPLE_INPUT: &str = "$ cd /
-$ ls
-dir a
-14848514 b.txt
-8504156 c.dat
-dir d
-$ cd a
-$ ls
-dir e
-29116 f
-2557 g
-62596 h.lst
-$ cd e
-$ ls
-584 i
-$ cd ..
-$ cd ..
-$ cd d
-$ ls
-4060174 j
-8033020 d.log
-5626152 d.ext
-7214296 k";
+    const EXAMPLE_INPUT: &str = "
+        $ cd /
+        $ ls
+        dir a
+        14848514 b.txt
+        8504156 c.dat
+        dir d
+        $ cd a
+        $ ls
+        dir e
+        29116 f
+        2557 g
+        62596 h.lst
+        $ cd e
+        $ ls
+        584 i
+        $ cd ..
+        $ cd ..
+        $ cd d
+        $ ls
+        4060174 j
+        8033020 d.log
+        5626152 d.ext
+        7214296 k
+    ";
 
     #[test]
     fn problem1_test() {
