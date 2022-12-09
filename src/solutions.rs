@@ -48,10 +48,11 @@ mod prelude {
 
     macro_rules! parse {
         ($input:expr) => {
-            parser::parse($input)
-                .map_err(|x| x.to_owned())
-                .context("failed to parse input")?
-                .1
+            <::std::result::Result<_, _> as ::nom::Finish<_, _, _>>::finish(
+                parser::parse($input).map_err(|x| x.to_owned()),
+            )
+            .context("failed to parse input")?
+            .1
         };
     }
 }
