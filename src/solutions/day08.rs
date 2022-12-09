@@ -86,8 +86,8 @@ mod parser {
             c.to_digit(10).unwrap() as u8
         });
         let row = many1(digit);
-        let grid = into(separated_list1(line_ending, row));
-        complete(grid)(input)
+        let grid = into(many1(ws_line(row)));
+        ws_all_consuming(grid)(input)
     }
 }
 
@@ -95,11 +95,13 @@ mod parser {
 mod tests {
     use super::*;
 
-    const EXAMPLE_INPUT: &str = "30373
-25512
-65332
-33549
-35390";
+    const EXAMPLE_INPUT: &str = "
+        30373
+        25512
+        65332
+        33549
+        35390
+    ";
 
     #[test]
     fn problem1_test() {

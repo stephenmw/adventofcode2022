@@ -1,3 +1,4 @@
+use nom::combinator::all_consuming;
 use prelude::*;
 use std::str::FromStr;
 
@@ -15,7 +16,7 @@ pub mod prelude {
         AsChar, IResult, InputTakeAtPosition, Parser,
     };
 
-    pub use super::{complete, int, uint};
+    pub use super::{complete, int, uint, ws_all_consuming, ws_line};
 }
 
 pub fn uint<T: FromStr>(input: &str) -> IResult<&str, T> {
@@ -33,12 +34,31 @@ pub fn int<T: FromStr>(input: &str) -> IResult<&str, T> {
 }
 
 // Ensures that parser F
-pub fn complete<I, O1, E, P>(parser: P) -> impl FnMut(I) -> IResult<I, O1, E>
+pub fn complete<I, O, E, P>(parser: P) -> impl FnMut(I) -> IResult<I, O, E>
 where
     I: nom::InputLength + nom::InputTakeAtPosition + Clone,
     <I as nom::InputTakeAtPosition>::Item: nom::AsChar + Clone,
-    P: nom::Parser<I, O1, E>,
+    P: nom::Parser<I, O, E>,
     E: nom::error::ParseError<I>,
 {
     terminated(parser, tuple((multispace0, eof)))
+}
+
+pub fn ws_all_consuming<I, O, E, P>(parser: P) -> impl FnMut(I) -> IResult<I, O, E>
+where
+    I: nom::InputLength + nom::InputTakeAtPosition + Clone,
+    <I as nom::InputTakeAtPosition>::Item: nom::AsChar + Clone,
+    P: nom::Parser<I, O, E>,
+    E: nom::error::ParseError<I>,
+{
+    all_consuming(delimited(multispace0, parser, multispace0))
+}
+
+pub fn ws_line<'a, O, E, P>(parser: P) -> impl FnMut(&'a str) -> IResult<&'a str, O, E>
+where
+    P: nom::Parser<&'a str, O, E>,
+    E: nom::error::ParseError<&'a str>,
+{
+    let end_of_line = alt((line_ending, eof));
+    delimited(space0, parser, tuple((space0, end_of_line)))
 }
