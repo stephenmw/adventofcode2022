@@ -6,27 +6,36 @@ use std::collections::HashSet;
 pub fn problem1(input: &str) -> Result<String, anyhow::Error> {
     let instructions = parse!(input);
 
-    let mut state = State::default();
+    let mut state = State::<2>::default();
     let mut tail_locations = HashSet::new();
 
     for inst in instructions {
         for _ in 0..inst.steps {
-            state = state
-                .step(inst.direction)
-                .ok_or(anyhow!("steped off postive grid"))?;
-            println!("{:?}", state);
-            tail_locations.insert(state.tail);
+            state.step(inst.direction);
+            tail_locations.insert(state.tail());
         }
     }
 
     Ok(tail_locations.len().to_string())
 }
 
-pub fn problem2(_input: &str) -> Result<String, anyhow::Error> {
-    todo!()
+pub fn problem2(input: &str) -> Result<String, anyhow::Error> {
+    let instructions = parse!(input);
+
+    let mut state = State::<10>::default();
+    let mut tail_locations = HashSet::new();
+
+    for inst in instructions {
+        for _ in 0..inst.steps {
+            state.step(inst.direction);
+            tail_locations.insert(state.tail());
+        }
+    }
+
+    Ok(tail_locations.len().to_string())
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub struct Point {
     pub x: isize,
     pub y: isize,
@@ -37,58 +46,66 @@ impl Point {
         Point { x: x, y: y }
     }
 
-    pub fn next(&self, d: Direction) -> Option<Point> {
-        let p = match d {
-            Direction::Up => Point::new(self.x, self.y.checked_add(1)?),
-            Direction::Down => Point::new(self.x, self.y.checked_sub(1)?),
-            Direction::Left => Point::new(self.x.checked_sub(1)?, self.y),
-            Direction::Right => Point::new(self.x.checked_add(1)?, self.y),
-        };
-
-        Some(p)
+    pub fn next(&self, d: Direction) -> Point {
+        match d {
+            Direction::Up => Point::new(self.x, self.y + 1),
+            Direction::Down => Point::new(self.x, self.y - 1),
+            Direction::Left => Point::new(self.x - 1, self.y),
+            Direction::Right => Point::new(self.x + 1, self.y),
+        }
     }
 }
 
 #[derive(Clone, Copy, Debug)]
-struct State {
-    head: Point,
-    tail: Point,
+struct State<const N: usize> {
+    knots: [Point; N],
 }
 
-impl State {
-    fn step(&self, d: Direction) -> Option<State> {
-        let head = self.head.next(d)?;
-        let mut tail = self.tail;
+impl<const N: usize> State<N> {
+    fn step(&mut self, d: Direction) {
+        fn step_next_knot(prev: Point, mut next: Point) -> Point {
+            let move_x = prev.x.abs_diff(next.x) > 1;
+            let move_y = prev.y.abs_diff(next.y) > 1;
+            let move_diag = prev.x != next.x && prev.y != next.y && (move_x || move_y);
 
-        let move_x = head.x.abs_diff(tail.x) > 1;
-        let move_y = head.y.abs_diff(tail.y) > 1;
-        let move_diag = head.x != tail.x && head.y != tail.y && (move_x || move_y);
-
-        if move_x || move_diag {
-            if head.x > tail.x {
-                tail.x += 1;
-            } else {
-                tail.x = tail.x.checked_sub(1)?;
+            if move_x || move_diag {
+                if prev.x > next.x {
+                    next.x += 1;
+                } else {
+                    next.x -= 1;
+                }
             }
+
+            if move_y || move_diag {
+                if prev.y > next.y {
+                    next.y += 1;
+                } else {
+                    next.y = next.y - 1;
+                }
+            }
+
+            next
         }
 
-        if move_y || move_diag {
-            if head.y > tail.y {
-                tail.y += 1;
-            } else {
-                tail.y = tail.y.checked_sub(1)?;
-            }
-        }
+        self.knots[0] = self.knots[0].next(d);
 
-        Some(State { head, tail })
+        for i in 1..self.knots.len() {
+            let prev = self.knots[i - 1];
+            let next = self.knots[i];
+
+            self.knots[i] = step_next_knot(prev, next);
+        }
+    }
+
+    fn tail(&self) -> Point {
+        self.knots[self.knots.len() - 1]
     }
 }
 
-impl Default for State {
+impl<const N: usize> Default for State<N> {
     fn default() -> Self {
         State {
-            head: Point::new(0, 0),
-            tail: Point::new(0, 0),
+            knots: [Point::default(); N],
         }
     }
 }
@@ -140,6 +157,6 @@ mod tests {
 
     #[test]
     fn problem2_test() {
-        //assert_eq!(problem2(EXAMPLE_INPUT).unwrap(), "")
+        assert_eq!(problem2(EXAMPLE_INPUT).unwrap(), "1")
     }
 }
