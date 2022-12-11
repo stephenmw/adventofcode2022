@@ -4,20 +4,25 @@ use crate::solutions::prelude::*;
 
 pub fn problem1(input: &str) -> Result<String, anyhow::Error> {
     let monkeys = parse!(input);
-    let mut group = MonkeyGroup::from(monkeys);
-    (0..20).for_each(|_| group.round(3));
-
-    let mut inspections: Vec<_> = group.monkeys.iter().map(|m| m.num_inspections).collect();
-    inspections.sort_unstable_by(|a, b| b.cmp(a));
-
-    let ans: u64 = (&inspections[..2]).iter().product();
-    Ok(ans.to_string())
+    let group = MonkeyGroup::new(monkeys, |x| x / 3);
+    simulate_monkeys(group, 20)
 }
 
 pub fn problem2(input: &str) -> Result<String, anyhow::Error> {
     let monkeys = parse!(input);
-    let mut group = MonkeyGroup::from(monkeys);
-    (0..10000).for_each(|_| group.round(1));
+    let common_multiple: u64 = monkeys.iter().map(|m| m.test_divisor).product();
+    let group = MonkeyGroup::new(monkeys, move |x| x % common_multiple);
+    simulate_monkeys(group, 10000)
+}
+
+fn simulate_monkeys<F>(
+    mut group: MonkeyGroup<F>,
+    iterations: usize,
+) -> Result<String, anyhow::Error>
+where
+    F: Fn(u64) -> u64,
+{
+    (0..iterations).for_each(|_| group.round());
 
     let mut inspections: Vec<_> = group.monkeys.iter().map(|m| m.num_inspections).collect();
     inspections.sort_unstable_by(|a, b| b.cmp(a));
@@ -26,24 +31,27 @@ pub fn problem2(input: &str) -> Result<String, anyhow::Error> {
     Ok(ans.to_string())
 }
 
-struct MonkeyGroup {
+struct MonkeyGroup<F: Fn(u64) -> u64> {
     monkeys: Vec<Monkey>,
-    multiple_divisors: u64,
+    reducer: F,
 }
 
-impl MonkeyGroup {
-    fn round(&mut self, worry_divisor: u64) {
+impl<F: Fn(u64) -> u64> MonkeyGroup<F> {
+    fn new(monkeys: Vec<Monkey>, reducer: F) -> Self {
+        Self { monkeys, reducer }
+    }
+
+    fn round(&mut self) {
         for id in 0..self.monkeys.len() {
-            self.monkey_round(id, worry_divisor);
+            self.monkey_round(id);
         }
     }
 
-    fn monkey_round(&mut self, id: usize, worry_divisor: u64) {
+    fn monkey_round(&mut self, id: usize) {
         while let Some(item) = self.monkeys[id].items.pop_front() {
             self.monkeys[id].num_inspections += 1;
 
-            let new_worry = (self.monkeys[id].operation.apply(item.worry) % self.multiple_divisors)
-                / worry_divisor;
+            let new_worry = (self.reducer)(self.monkeys[id].operation.apply(item.worry));
 
             let next_monkey = match new_worry % self.monkeys[id].test_divisor == 0 {
                 true => self.monkeys[id].next_true,
@@ -51,16 +59,6 @@ impl MonkeyGroup {
             };
 
             self.monkeys[next_monkey].items.push_back(new_worry.into());
-        }
-    }
-}
-
-impl From<Vec<Monkey>> for MonkeyGroup {
-    fn from(monkeys: Vec<Monkey>) -> Self {
-        let multiple_divisors = monkeys.iter().map(|m| m.test_divisor).product();
-        MonkeyGroup {
-            monkeys,
-            multiple_divisors,
         }
     }
 }
