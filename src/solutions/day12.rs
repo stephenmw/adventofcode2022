@@ -16,7 +16,7 @@ pub fn problem1(input: &str) -> Result<String, anyhow::Error> {
         .find(|p| grid.get(*p).map(|&x| x == 'S').unwrap_or(false))
         .ok_or(anyhow!("no starting location found"))?;
 
-    let ans = bfs(&grid, start)?;
+    let ans = bfs(&grid, [start])?;
     Ok(ans.to_string())
 }
 
@@ -32,26 +32,28 @@ pub fn problem2(input: &str) -> Result<String, anyhow::Error> {
         .iter_points()
         .filter(|p| grid.get(*p).map(|&x| x == 'S' || x == 'a').unwrap_or(false));
 
-    let ans = start_locations
-        .filter_map(|start| bfs(&grid, start).ok())
-        .min()
-        .ok_or(anyhow!("no paths found"))?;
+    let ans = bfs(&grid, start_locations)?;
 
     Ok(ans.to_string())
 }
 
-fn bfs(grid: &Grid<char>, start: Point) -> Result<usize, anyhow::Error> {
+fn bfs<I>(grid: &Grid<char>, start_points: I) -> Result<usize, anyhow::Error>
+where
+    I: std::iter::IntoIterator<Item = Point>,
+{
     let mut frontier = VecDeque::new();
     let mut seen = HashSet::new();
 
-    frontier.push_back((start, 0));
-    seen.insert(start);
+    for start in start_points {
+        frontier.push_back((start, 0));
+        seen.insert(start);
+    }
 
     while let Some((p, steps)) = frontier.pop_front() {
         let cur_height = match grid.get(p) {
             Some('S') => 'a',
             Some(x) => *x,
-            None => panic!("bad point"),
+            None => continue,
         } as u32;
 
         let next_directions = Direction::iter().filter_map(|d| p.next(d));
