@@ -25,7 +25,7 @@ pub fn problem2(input: &str) -> Result<String, anyhow::Error> {
     modified_input += "\n\n[[2]]\n[[6]]";
     let data = parse!(&modified_input);
     let mut packets: Vec<_> = data.into_iter().flat_map(|(a, b)| [a, b]).collect();
-    packets.sort_unstable_by(|a, b| a.cmp(b));
+    packets.sort_unstable();
 
     let divider_locations = packets
         .iter()
@@ -41,7 +41,7 @@ pub fn problem2(input: &str) -> Result<String, anyhow::Error> {
     Ok(ans.to_string())
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, Eq)]
 pub struct List {
     values: Vec<Element>,
 }
@@ -52,7 +52,9 @@ impl List {
             values: vec![Element::Value(v)],
         }
     }
+}
 
+impl std::cmp::Ord for List {
     fn cmp(&self, other: &Self) -> Ordering {
         for (a, b) in self.values.iter().zip(other.values.iter()) {
             let ord = a.cmp(b);
@@ -62,6 +64,18 @@ impl List {
         }
 
         self.values.len().cmp(&other.values.len())
+    }
+}
+
+impl std::cmp::PartialOrd for List {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl std::cmp::PartialEq for List {
+    fn eq(&self, other: &Self) -> bool {
+        self.cmp(other).is_eq()
     }
 }
 
@@ -79,13 +93,13 @@ impl std::fmt::Display for List {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq)]
 enum Element {
     List(List),
     Value(u32),
 }
 
-impl Element {
+impl std::cmp::Ord for Element {
     fn cmp(&self, other: &Self) -> Ordering {
         match (self, other) {
             (Self::List(a), Self::List(b)) => a.cmp(b),
@@ -93,6 +107,18 @@ impl Element {
             (Self::List(a), Self::Value(b)) => a.cmp(&List::from_value(*b)),
             (Self::Value(a), Self::List(b)) => (List::from_value(*a)).cmp(b),
         }
+    }
+}
+
+impl std::cmp::PartialOrd for Element {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl std::cmp::PartialEq for Element {
+    fn eq(&self, other: &Self) -> bool {
+        self.cmp(other).is_eq()
     }
 }
 
