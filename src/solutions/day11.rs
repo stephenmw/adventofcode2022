@@ -1,6 +1,7 @@
 use std::collections::VecDeque;
 
 use crate::solutions::prelude::*;
+use crate::utils::top_n;
 
 pub fn problem1(input: &str) -> Result<String, anyhow::Error> {
     let monkeys = parse!(input);
@@ -24,10 +25,8 @@ where
 {
     (0..iterations).for_each(|_| group.round());
 
-    let mut inspections: Vec<_> = group.monkeys.iter().map(|m| m.num_inspections).collect();
-    inspections.sort_unstable_by(|a, b| b.cmp(a));
-
-    let ans: u64 = (&inspections[..2]).iter().product();
+    let inspections = group.monkeys.iter().map(|m| m.num_inspections);
+    let ans: u64 = top_n(inspections, 2).product();
     Ok(ans.to_string())
 }
 

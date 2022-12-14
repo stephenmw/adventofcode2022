@@ -1,4 +1,5 @@
 use crate::solutions::prelude::*;
+use crate::utils;
 
 pub fn problem1(input: &str) -> Result<String, anyhow::Error> {
     let data = parse!(input);
@@ -13,13 +14,10 @@ pub fn problem1(input: &str) -> Result<String, anyhow::Error> {
 pub fn problem2(input: &str) -> Result<String, anyhow::Error> {
     let data = parse!(input);
 
-    let mut counts: Vec<_> = data.iter().map(|x| x.iter().sum::<usize>()).collect();
-    counts.sort_unstable();
-    counts.reverse();
+    let counts = data.iter().map(|x| x.iter().sum::<usize>());
+    let ans: usize = utils::top_n(counts, 3).sum();
 
-    let ans = (&counts[..3]).iter().sum::<usize>().to_string();
-
-    Ok(ans)
+    Ok(ans.to_string())
 }
 
 mod parser {
