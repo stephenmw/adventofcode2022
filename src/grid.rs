@@ -13,6 +13,10 @@ impl<T> Grid<T> {
         self.cells.get(p.y)?.get(p.x)
     }
 
+    pub fn get_mut(&mut self, p: Point) -> Option<&mut T> {
+        self.cells.get_mut(p.y)?.get_mut(p.x)
+    }
+
     pub fn iter_points(&self) -> impl Iterator<Item = Point> {
         let (x_len, y_len) = self.size();
         (0..y_len).flat_map(move |y| (0..x_len).map(move |x| Point::new(x, y)))
