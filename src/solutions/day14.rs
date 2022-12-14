@@ -23,8 +23,35 @@ pub fn problem1(input: &str) -> Result<String, anyhow::Error> {
     Ok(count.to_string())
 }
 
-pub fn problem2(_input: &str) -> Result<String, anyhow::Error> {
-    unimplemented!()
+pub fn problem2(input: &str) -> Result<String, anyhow::Error> {
+    let mut lines = parse!(input);
+    let max_x = lines.iter().flat_map(|l| [l.a.x, l.b.x]).max().unwrap();
+    let max_y = lines.iter().flat_map(|l| [l.a.y, l.b.y]).max().unwrap() + 2;
+
+    lines.push(Line::new(
+        Point { x: 0, y: max_y },
+        Point {
+            x: max_x + 500,
+            y: max_y,
+        },
+    ));
+
+    let mut grid = Grid::new(vec![vec![GridValue::Air; max_x + 501]; max_y + 1]);
+    for line in lines {
+        for point in line.points() {
+            *grid.get_mut(point).unwrap() = GridValue::Rock;
+        }
+    }
+
+    let mut count = 0;
+    while *grid.get(Point::new(500, 0)).unwrap() == GridValue::Air {
+        if !drop_sand(&mut grid) {
+            bail!("grid not big enough");
+        }
+        count += 1;
+    }
+
+    Ok(count.to_string())
 }
 
 fn drop_sand(grid: &mut Grid<GridValue>) -> bool {
@@ -139,6 +166,6 @@ mod tests {
 
     #[test]
     fn problem2_test() {
-        //assert_eq!(problem2(EXAMPLE_INPUT).unwrap(), "93")
+        assert_eq!(problem2(EXAMPLE_INPUT).unwrap(), "93")
     }
 }
