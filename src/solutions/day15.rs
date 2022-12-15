@@ -1,5 +1,7 @@
 use crate::solutions::prelude::*;
 
+use rayon::prelude::*;
+
 pub fn problem1(input: &str) -> Result<String, anyhow::Error> {
     problem1_(input, 2000000)
 }
@@ -23,20 +25,19 @@ pub fn problem2(input: &str) -> Result<String, anyhow::Error> {
     problem2_(input, 4000000)
 }
 
-fn problem2_(input: &str, max_coordinate: usize) -> Result<String, anyhow::Error> {
+fn problem2_(input: &str, max_coordinate: isize) -> Result<String, anyhow::Error> {
     let sensors = parse!(input);
 
-    for row in 0..=max_coordinate {
-        let ranges = find_range_for_row(&sensors, row as isize);
-        if ranges.len() > 1 {
-            let x = ranges[0].end;
-            let y = row as isize;
-            let ans = x * 4000000 + y;
-            return Ok(ans.to_string());
-        }
-    }
+    let (row, ranges) = (0..=max_coordinate)
+        .into_par_iter()
+        .map(|row| (row, find_range_for_row(&sensors, row)))
+        .find_any(|(_, ranges)| ranges.len() > 1)
+        .ok_or(anyhow!("no solution"))?;
 
-    bail!("no solution")
+    let x = ranges[0].end;
+    let y = row;
+    let ans = x * 4000000 + y;
+    Ok(ans.to_string())
 }
 
 fn unique_beacons(sensors: &[Sensor]) -> Vec<Point> {
