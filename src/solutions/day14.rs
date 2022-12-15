@@ -1,5 +1,3 @@
-use std::cmp::Ordering;
-
 use crate::grid::{Direction, Grid, Point};
 use crate::solutions::prelude::*;
 
@@ -99,23 +97,15 @@ impl Line {
     }
 
     fn points(&self) -> Vec<Point> {
-        if self.a.x == self.b.x {
-            let (min_y, max_y) = match self.a.y.cmp(&self.b.y) {
-                Ordering::Less => (self.a.y, self.b.y),
-                Ordering::Equal => (self.a.y, self.b.y),
-                Ordering::Greater => (self.b.y, self.a.y),
-            };
+        let order = |a: usize, b: usize| (a.min(b), a.max(b));
 
+        if self.a.x == self.b.x {
+            let (min_y, max_y) = order(self.a.y, self.b.y);
             (min_y..=max_y)
                 .map(move |y| Point::new(self.a.x, y))
                 .collect()
         } else if self.a.y == self.b.y {
-            let (min_x, max_x) = match self.a.x.cmp(&self.b.x) {
-                Ordering::Less => (self.a.x, self.b.x),
-                Ordering::Equal => (self.a.x, self.b.x),
-                Ordering::Greater => (self.b.x, self.a.x),
-            };
-
+            let (min_x, max_x) = order(self.a.x, self.b.x);
             (min_x..=max_x)
                 .map(move |x| Point::new(x, self.a.y))
                 .collect()
