@@ -23,7 +23,7 @@ fn open_valves<const RUNNERS: usize>(
     graph.make_complete();
     graph.trim();
 
-    let valves: Vec<_> = graph.nodes.into_values().collect();
+    let valves = convert_valves(&graph.nodes.into_values().collect::<Vec<_>>());
     let start_index = valves
         .iter()
         .enumerate()
@@ -53,14 +53,12 @@ fn open_valves<const RUNNERS: usize>(
             max_pressure_released = max_pressure_released.max(state.value);
         }
 
-        for i in 0..valves.len() {
-            if !state.visited.get(i) {
-                let next_name = valves[i].name;
-                let cost = *cur_valve.tunnels.get(&next_name).unwrap();
+        for &(valve_id, distance) in &cur_valve.tunnels {
+            if !state.visited.get(valve_id) {
                 let next_state = {
                     let mut s = state.clone();
-                    s.visited = s.visited.with_set(i);
-                    s.runners[0] = Runner::new(i, cost + if open_valve { 1 } else { 0 });
+                    s.visited = s.visited.with_set(valve_id);
+                    s.runners[0] = Runner::new(valve_id, distance + if open_valve { 1 } else { 0 });
                     s.advance();
                     s
                 };
@@ -209,6 +207,40 @@ pub struct Valve {
     flow_rate: usize,
     // distance to other valves
     tunnels: HashMap<ValveName, usize>,
+}
+
+#[derive(Clone, Debug, Default)]
+struct Valve2 {
+    name: ValveName,
+    flow_rate: usize,
+    // (valve, distance)
+    tunnels: Vec<(usize, usize)>,
+}
+
+fn convert_valves(valves: &[Valve]) -> Vec<Valve2> {
+    let valve_ids: HashMap<_, _> = valves
+        .iter()
+        .enumerate()
+        .map(|(i, v)| (v.name, i))
+        .collect();
+    let mut new_valves = vec![Valve2::default(); valve_ids.len()];
+
+    for v in valves {
+        let new_valve = Valve2 {
+            name: v.name,
+            flow_rate: v.flow_rate,
+            tunnels: v
+                .tunnels
+                .iter()
+                .map(|(name, distance)| (*valve_ids.get(name).unwrap(), *distance))
+                .collect(),
+        };
+
+        let id = *valve_ids.get(&new_valve.name).unwrap();
+        new_valves[id] = new_valve;
+    }
+
+    new_valves
 }
 
 mod parser {
