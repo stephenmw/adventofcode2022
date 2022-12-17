@@ -3,6 +3,8 @@ use std::{
     collections::{BinaryHeap, HashMap},
 };
 
+use rayon::prelude::*;
+
 use crate::solutions::prelude::*;
 
 pub fn problem1(input: &str) -> Result<String, anyhow::Error> {
@@ -31,61 +33,75 @@ fn open_valves<const RUNNERS: usize>(
         .ok_or(anyhow!("start not found"))?
         .0;
 
-    let mut stack = vec![State {
+    let initial_state = State {
         time_remaining: time,
-        opening_last_paid: time + 1,
         value: 0,
         visited: BitSet::default().with_set(start_index),
         runners: [Runner::new(start_index, 0); RUNNERS],
-    }];
+    };
 
-    let mut max_pressure_released = 0;
-
-    while let Some(mut state) = stack.pop() {
+    fn open_valves_rec<const RUNNERS: usize>(
+        valves: &[Valve2],
+        mut state: State<RUNNERS>,
+    ) -> usize {
         if state.time_remaining == 0 {
-            continue;
+            return state.value;
         }
 
         let cur_valve = &valves[state.runners[0].cur_valve];
         let open_valve = cur_valve.flow_rate > 0;
         if open_valve {
             state.value += cur_valve.flow_rate * (state.time_remaining - 1);
-            max_pressure_released = max_pressure_released.max(state.value);
         }
 
-        for &(valve_id, distance) in &cur_valve.tunnels {
-            if !state.visited.get(valve_id) {
-                let next_state = {
-                    let mut s = state.clone();
-                    s.visited = s.visited.with_set(valve_id);
-                    s.runners[0] = Runner::new(valve_id, distance + if open_valve { 1 } else { 0 });
-                    s.advance();
-                    s
-                };
-                stack.push(next_state);
+        let end_runner_state = {
+            let mut s = state.clone();
+            s.runners[0] = Runner::new(0, usize::MAX);
+            s.advance();
+            s
+        };
+
+        let map_state = |&(valve_id, distance)| {
+            if state.visited.get(valve_id) {
+                return None;
             }
-        }
-
-        // at each step, kill the current runner so the other can work unimpeded.
-        assert!(RUNNERS == 1 || RUNNERS == 2); // the hack below only works for R=1 or R=2
-        if RUNNERS == 2 {
             let next_state = {
                 let mut s = state.clone();
-                s.runners[0] = Runner::new(0, usize::MAX);
+                s.visited = s.visited.with_set(valve_id);
+                s.runners[0] = Runner::new(valve_id, distance + if open_valve { 1 } else { 0 });
                 s.advance();
                 s
             };
-            stack.push(next_state);
+            Some(next_state)
+        };
+
+        if state.time_remaining > 20 {
+            cur_valve
+                .tunnels
+                .par_iter()
+                .filter_map(map_state)
+                .chain([end_runner_state])
+                .map(|s| open_valves_rec(valves, s))
+                .max()
+                .unwrap_or(state.value)
+        } else {
+            cur_valve
+                .tunnels
+                .iter()
+                .filter_map(map_state)
+                .chain([end_runner_state])
+                .map(|s| open_valves_rec(valves, s))
+                .max()
+                .unwrap_or(state.value)
         }
     }
 
-    Ok(max_pressure_released)
+    Ok(open_valves_rec(&valves, initial_state))
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct State<const RUNNERS: usize> {
     time_remaining: usize,
-    opening_last_paid: usize,
     value: usize,
     visited: BitSet,
     runners: [Runner; RUNNERS],
