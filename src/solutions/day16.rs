@@ -7,7 +7,18 @@ use crate::solutions::prelude::*;
 
 pub fn problem1(input: &str) -> Result<String, anyhow::Error> {
     let valves = parse!(input);
+    open_valves::<1>(valves, 30).map(|x| x.to_string())
+}
 
+pub fn problem2(input: &str) -> Result<String, anyhow::Error> {
+    let valves = parse!(input);
+    open_valves::<2>(valves, 26).map(|x| x.to_string())
+}
+
+fn open_valves<const RUNNERS: usize>(
+    valves: Vec<Valve>,
+    time: usize,
+) -> Result<usize, anyhow::Error> {
     let mut graph = Graph::new(valves);
     graph.make_complete();
     graph.trim();
@@ -19,11 +30,13 @@ pub fn problem1(input: &str) -> Result<String, anyhow::Error> {
         .find(|(_, v)| v.name == ['A', 'A'])
         .ok_or(anyhow!("start not found"))?
         .0;
+
     let mut stack = vec![State {
-        time_remaining: 30,
+        time_remaining: time,
+        opening_last_paid: time + 1,
         value: 0,
         visited: BitSet::default().with_set(start_index),
-        cur_valve: start_index,
+        runners: [Runner::new(start_index, 0); RUNNERS],
     }];
 
     let mut max_pressure_released = 0;
@@ -33,11 +46,10 @@ pub fn problem1(input: &str) -> Result<String, anyhow::Error> {
             continue;
         }
 
-        let cur_valve = &valves[state.cur_valve];
-
-        if cur_valve.flow_rate > 0 {
-            state.time_remaining -= 1;
-            state.value += cur_valve.flow_rate * state.time_remaining;
+        let cur_valve = &valves[state.runners[0].cur_valve];
+        let open_valve = cur_valve.flow_rate > 0;
+        if open_valve {
+            state.value += cur_valve.flow_rate * (state.time_remaining - 1);
             max_pressure_released = max_pressure_released.max(state.value);
         }
 
@@ -45,38 +57,65 @@ pub fn problem1(input: &str) -> Result<String, anyhow::Error> {
             if !state.visited.get(i) {
                 let next_name = valves[i].name;
                 let cost = *cur_valve.tunnels.get(&next_name).unwrap();
-                let Some(next_state) = state.next_valve(i, cost) else {continue};
+                let next_state = {
+                    let mut s = state.clone();
+                    s.visited = s.visited.with_set(i);
+                    s.runners[0] = Runner::new(i, cost + if open_valve { 1 } else { 0 });
+                    s.advance();
+                    s
+                };
                 stack.push(next_state);
             }
         }
+
+        // at each step, kill the current runner so the other can work unimpeded.
+        assert!(RUNNERS == 1 || RUNNERS == 2); // the hack below only works for R=1 or R=2
+        if RUNNERS == 2 {
+            let next_state = {
+                let mut s = state.clone();
+                s.runners[0] = Runner::new(0, usize::MAX);
+                s.advance();
+                s
+            };
+            stack.push(next_state);
+        }
     }
 
-    Ok(max_pressure_released.to_string())
+    Ok(max_pressure_released)
 }
 
-pub fn problem2(_input: &str) -> Result<String, anyhow::Error> {
-    todo!()
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-struct State {
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct State<const RUNNERS: usize> {
     time_remaining: usize,
+    opening_last_paid: usize,
     value: usize,
     visited: BitSet,
-    cur_valve: usize,
+    runners: [Runner; RUNNERS],
 }
 
-impl State {
-    fn next_valve(&self, valve: usize, cost: usize) -> Option<Self> {
-        let mut ret = self.clone();
-        ret.cur_valve = valve;
-        ret.visited = ret.visited.with_set(valve);
-        ret.time_remaining = ret.time_remaining.checked_sub(cost)?;
-        Some(ret)
+impl<const RUNNERS: usize> State<RUNNERS> {
+    fn advance(&mut self) {
+        self.runners.sort_by_key(|r| r.wait);
+        let time_to_skip = self.runners[0].wait;
+
+        self.time_remaining = self.time_remaining.saturating_sub(time_to_skip);
+        self.runners.iter_mut().for_each(|r| r.wait -= time_to_skip);
     }
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Runner {
+    cur_valve: usize,
+    wait: usize,
+}
+
+impl Runner {
+    fn new(cur_valve: usize, wait: usize) -> Self {
+        Self { cur_valve, wait }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 struct BitSet(u32);
 
 impl BitSet {
@@ -226,6 +265,6 @@ mod tests {
 
     #[test]
     fn problem2_test() {
-        //assert_eq!(problem2(EXAMPLE_INPUT).unwrap(), "1707")
+        assert_eq!(problem2(EXAMPLE_INPUT).unwrap(), "1707")
     }
 }
