@@ -1,11 +1,10 @@
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Grid<T> {
     pub cells: Vec<Vec<T>>,
 }
 
 impl<T> Grid<T> {
     pub fn new(data: Vec<Vec<T>>) -> Self {
-        assert!(!data.is_empty() && !data[0].is_empty());
         Grid { cells: data }
     }
 
@@ -32,6 +31,22 @@ impl<T> Grid<T> {
 
     pub fn size(&self) -> (usize, usize) {
         (self.cells[0].len(), self.cells.len())
+    }
+}
+
+impl<T: Default> Grid<T> {
+    pub fn get_mut_or_expand(&mut self, p: Point) -> &mut T {
+        if p.y >= self.cells.len() {
+            self.cells.resize_with(p.y + 1, Vec::new);
+        }
+
+        let row = &mut self.cells[p.y];
+
+        if p.x >= row.len() {
+            row.resize_with(p.x + 1, T::default);
+        }
+
+        &mut row[p.x]
     }
 }
 
@@ -82,7 +97,7 @@ impl Point {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Direction {
     Up,
     Down,
