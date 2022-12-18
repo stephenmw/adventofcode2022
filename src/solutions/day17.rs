@@ -106,22 +106,8 @@ impl<'a> Dropper<'a> {
         self.shape %= SHAPES.len();
         self.direction_index %= self.directions.len();
 
-        let mut seen = vec![false; 7];
-        let mut last_row = 0;
-        for (i, row) in self.grid.cells.iter().enumerate().rev() {
-            for (i, b) in row.iter().enumerate() {
-                if *b {
-                    seen[i] = true;
-                }
-            }
-
-            if seen.iter().all(|x| *x) {
-                last_row = i;
-                break;
-            }
-        }
-
-        self.grid.cells.drain(..last_row);
+        let first_head_row = head(&self.grid);
+        self.grid.cells.drain(..first_head_row);
     }
 
     fn drop_rock(&mut self) {
