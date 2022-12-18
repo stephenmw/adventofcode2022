@@ -2,7 +2,7 @@ use crate::solutions::prelude::*;
 
 pub fn problem1(input: &str) -> Result<String, anyhow::Error> {
     let points = parse!(input);
-    let grid = build_grid(&points, 30)?;
+    let grid = build_grid(&points)?;
 
     let ans: usize = points
         .iter()
@@ -28,7 +28,7 @@ pub fn problem2(input: &str) -> Result<String, anyhow::Error> {
         })
         .collect();
 
-    let mut grid = build_grid(&translated_points, 30)?;
+    let mut grid = build_grid(&translated_points)?;
     let mut frontier = vec![Point::new(0, 0, 0)];
 
     while let Some(p) = frontier.pop() {
@@ -65,7 +65,16 @@ impl Default for Space {
     }
 }
 
-fn build_grid(points: &[Point], size: usize) -> Result<Grid<Space>, anyhow::Error> {
+fn build_grid(points: &[Point]) -> Result<Grid<Space>, anyhow::Error> {
+    // Size must be big enough to hold all points and for points not to touch
+    // the far border.
+    let size = points
+        .iter()
+        .flat_map(|p| [p.x, p.y, p.z])
+        .max()
+        .map(|s| s + 2)
+        .unwrap_or(0);
+
     let mut grid = Grid {
         cells: vec![vec![vec![Space::Empty; size]; size]; size],
     };
