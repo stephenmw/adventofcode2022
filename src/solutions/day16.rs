@@ -3,137 +3,116 @@ use std::{
     collections::{BinaryHeap, HashMap},
 };
 
-use rayon::prelude::*;
-
 use crate::solutions::prelude::*;
 
 pub fn problem1(input: &str) -> Result<String, anyhow::Error> {
     let valves = parse!(input);
-    open_valves::<1>(valves, 30).map(|x| x.to_string())
+    let best_seen = open_valves(valves, 30)?;
+
+    let ans = best_seen
+        .iter()
+        .map(|(_, released)| released)
+        .max()
+        .ok_or(anyhow!("no paths followed"))?;
+
+    Ok(ans.to_string())
 }
 
 pub fn problem2(input: &str) -> Result<String, anyhow::Error> {
     let valves = parse!(input);
-    open_valves::<2>(valves, 26).map(|x| x.to_string())
+    let best_seen = open_valves(valves, 26)?;
+
+    let ans = best_seen
+        .iter()
+        .flat_map(|x| best_seen.iter().zip(std::iter::repeat(x)))
+        .filter_map(|(a, b)| Some(a.1 + b.1).filter(|_| a.0.is_disjoint(&b.0)))
+        .max()
+        .ok_or(anyhow!("no disjoint paths"))?;
+
+    Ok(ans.to_string())
 }
 
-fn open_valves<const RUNNERS: usize>(
-    valves: Vec<Valve>,
-    time: usize,
-) -> Result<usize, anyhow::Error> {
+const START_VALVE: ValveName = ['A', 'A'];
+
+fn simplify_valves(valves: Vec<Valve>) -> Vec<Valve2> {
     let mut graph = Graph::new(valves);
     graph.make_complete();
     graph.trim();
+    let trimmed_valves: Vec<_> = graph.nodes.into_values().collect();
+    convert_valves(&trimmed_valves)
+}
 
-    let valves = convert_valves(&graph.nodes.into_values().collect::<Vec<_>>());
+fn open_valves(valves: Vec<Valve>, time: usize) -> Result<Vec<(BitSet, usize)>, anyhow::Error> {
+    let valves = simplify_valves(valves);
+
     let start_index = valves
         .iter()
         .enumerate()
-        .find(|(_, v)| v.name == ['A', 'A'])
+        .find(|(_, v)| v.name == START_VALVE)
         .ok_or(anyhow!("start not found"))?
         .0;
 
     let initial_state = State {
         time_remaining: time,
-        value: 0,
-        visited: BitSet::default().with_set(start_index),
-        runners: [Runner::new(start_index, 0); RUNNERS],
+        pressure_released: 0,
+        opened: BitSet::default().with_set(start_index),
+        cur_valve: start_index,
     };
 
-    fn open_valves_rec<const RUNNERS: usize>(
-        valves: &[Valve2],
-        mut state: State<RUNNERS>,
-    ) -> usize {
+    let mut stack = vec![initial_state];
+    let mut best = HashMap::<BitSet, usize>::new();
+
+    while let Some(mut state) = stack.pop() {
         if state.time_remaining == 0 {
-            return state.value;
+            continue;
         }
 
-        let cur_valve = &valves[state.runners[0].cur_valve];
-        let open_valve = cur_valve.flow_rate > 0;
-        if open_valve {
-            state.value += cur_valve.flow_rate * (state.time_remaining - 1);
+        let cur_valve = &valves[state.cur_valve];
+
+        if cur_valve.flow_rate > 0 {
+            state.time_remaining -= 1;
+            state.pressure_released += cur_valve.flow_rate * state.time_remaining;
+            state.opened = state.opened.with_set(state.cur_valve);
         }
+        let max_seen = best.entry(state.opened).or_insert(0);
+        *max_seen = (*max_seen).max(state.pressure_released);
 
-        let end_runner_state = {
-            let mut s = state.clone();
-            s.runners[0] = Runner::new(0, usize::MAX);
-            s.advance();
-            s
-        };
-
-        let map_state = |&(valve_id, distance)| {
-            if state.visited.get(valve_id) {
-                return None;
+        let next_states = cur_valve.tunnels.iter().filter_map(|&(v, d)| {
+            if !state.opened.contains(v) {
+                let mut new_state = state.clone();
+                new_state.time_remaining = state.time_remaining.checked_sub(d)?;
+                new_state.cur_valve = v;
+                Some(new_state)
+            } else {
+                None
             }
-            let next_state = {
-                let mut s = state.clone();
-                s.visited = s.visited.with_set(valve_id);
-                s.runners[0] = Runner::new(valve_id, distance + if open_valve { 1 } else { 0 });
-                s.advance();
-                s
-            };
-            Some(next_state)
-        };
+        });
 
-        if state.time_remaining > 20 {
-            cur_valve
-                .tunnels
-                .par_iter()
-                .filter_map(map_state)
-                .chain([end_runner_state])
-                .map(|s| open_valves_rec(valves, s))
-                .max()
-                .unwrap_or(state.value)
-        } else {
-            cur_valve
-                .tunnels
-                .iter()
-                .filter_map(map_state)
-                .chain([end_runner_state])
-                .map(|s| open_valves_rec(valves, s))
-                .max()
-                .unwrap_or(state.value)
-        }
+        stack.extend(next_states);
     }
 
-    Ok(open_valves_rec(&valves, initial_state))
+    // The starting valve was never opened so we need to unset it.
+    let best_seen: Vec<_> = best
+        .into_iter()
+        .map(|(open, released)| (open.with_unset(start_index), released))
+        .collect();
+
+    Ok(best_seen)
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct State<const RUNNERS: usize> {
+struct State {
     time_remaining: usize,
-    value: usize,
-    visited: BitSet,
-    runners: [Runner; RUNNERS],
-}
-
-impl<const RUNNERS: usize> State<RUNNERS> {
-    fn advance(&mut self) {
-        self.runners.sort_by_key(|r| r.wait);
-        let time_to_skip = self.runners[0].wait;
-
-        self.time_remaining = self.time_remaining.saturating_sub(time_to_skip);
-        self.runners.iter_mut().for_each(|r| r.wait -= time_to_skip);
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct Runner {
+    pressure_released: usize,
+    opened: BitSet,
     cur_valve: usize,
-    wait: usize,
 }
 
-impl Runner {
-    fn new(cur_valve: usize, wait: usize) -> Self {
-        Self { cur_valve, wait }
-    }
-}
-
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 struct BitSet(u32);
 
 impl BitSet {
-    fn get(&self, bit: usize) -> bool {
+    fn contains(&self, bit: usize) -> bool {
         assert!(bit < 32);
         let flag = 1 << bit;
         self.0 & flag > 0
@@ -143,6 +122,16 @@ impl BitSet {
         assert!(bit < 32);
         let flag = 1 << bit;
         BitSet(self.0 | flag)
+    }
+
+    fn with_unset(&self, bit: usize) -> Self {
+        assert!(bit < 32);
+        let flag = 1 << bit;
+        BitSet(self.0 & !flag)
+    }
+
+    fn is_disjoint(&self, other: &Self) -> bool {
+        self.0 & other.0 == 0
     }
 }
 
@@ -200,7 +189,7 @@ impl Graph {
         let dead_nodes: Vec<_> = self
             .nodes
             .iter()
-            .filter(|(name, valve)| valve.flow_rate == 0 && name != &&['A', 'A'])
+            .filter(|(name, valve)| valve.flow_rate == 0 && **name != START_VALVE)
             .map(|(name, _)| name)
             .cloned()
             .collect();
