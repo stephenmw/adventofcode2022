@@ -53,6 +53,19 @@ fn simulate_blueprint(blueprint: &Blueprint, time: usize) -> usize {
             state.resources.add(&state.robots);
 
             for robot in ready_robots {
+                let type_ = robot.robot_type;
+                if type_ != Resource::Geode {
+                    if state.resources.get(type_)
+                        >= blueprint.max_needed.get(type_) * state.time_remaining
+                    {
+                        continue;
+                    }
+
+                    if state.robots.get(type_) >= blueprint.max_needed.get(type_) {
+                        continue;
+                    }
+                }
+
                 let mut new_state = state.clone();
                 new_state.buy(&robot).expect("robot should be affordable");
                 new_state.unaffordable_robots = blueprint.robot_costs.clone().into();
@@ -77,6 +90,7 @@ fn simulate_blueprint(blueprint: &Blueprint, time: usize) -> usize {
 pub struct Blueprint {
     id: usize,
     robot_costs: [RobotCost; 4],
+    max_needed: ResourceState,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -230,9 +244,8 @@ mod parser {
                 mtag!("obsidian."),
             ),
         ))
-        .map(|(id, ore, clay, obsidian, geode)| Blueprint {
-            id,
-            robot_costs: [
+        .map(|(id, ore, clay, obsidian, geode)| {
+            let robot_costs = [
                 RobotCost {
                     robot_type: Resource::Ore,
                     resources: ArrayVec::from_iter([(Resource::Ore, ore)]),
@@ -255,7 +268,22 @@ mod parser {
                         (Resource::Obsidian, geode.1),
                     ]),
                 },
-            ],
+            ];
+
+            let max_needed = robot_costs.iter().flat_map(|r| &r.resources).fold(
+                ResourceState::default(),
+                |mut state, &(resource, amount)| {
+                    let cur = state.get_mut(resource);
+                    *cur = (*cur).max(amount);
+                    state
+                },
+            );
+
+            Blueprint {
+                id,
+                robot_costs,
+                max_needed,
+            }
         });
 
         ws_all_consuming(many1(blueprint))(input)
