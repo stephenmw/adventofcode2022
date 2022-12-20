@@ -21,14 +21,12 @@ pub fn problem2(input: &str) -> Result<String, anyhow::Error> {
 
 struct List {
     nums: Vec<(usize, isize)>,
-    index: Vec<usize>,
 }
 
 impl List {
     fn new(numbers: impl IntoIterator<Item = isize>) -> Self {
         let nums: Vec<_> = numbers.into_iter().enumerate().collect();
-        let index = (0..nums.len()).collect();
-        List { nums, index }
+        List { nums }
     }
 
     fn mix(&mut self) {
@@ -38,7 +36,7 @@ impl List {
     }
 
     fn move_number(&mut self, orig_index: usize) {
-        let index = self.index[orig_index];
+        let index = self.find(orig_index);
         let value = self.nums.remove(index);
         let new_index = add_offset(index, value.1, self.nums.len());
 
@@ -47,16 +45,16 @@ impl List {
         } else {
             self.nums.insert(new_index, value);
         }
+    }
 
-        if new_index > index {
-            for i in index..=new_index {
-                self.index[self.nums[i].0] = i;
-            }
-        } else {
-            for i in new_index..=index {
-                self.index[self.nums[i].0] = i;
-            }
-        }
+    fn find(&self, orig_index: usize) -> usize {
+        self.nums
+            .iter()
+            .map(|(i, _)| *i)
+            .enumerate()
+            .find(|(_, i)| *i == orig_index)
+            .unwrap()
+            .0
     }
 
     fn get(&self, index: usize) -> isize {
