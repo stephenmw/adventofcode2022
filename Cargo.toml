@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0"
+arrayvec = "0.7"
 clap = { version = "4.0", features = ["derive"]}
 lazy_static = "1.4"
 nom = "7.1"
