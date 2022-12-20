@@ -40,11 +40,7 @@ impl List {
         let value = self.nums.remove(index);
         let new_index = add_offset(index, value.1, self.nums.len());
 
-        if new_index == self.nums.len() {
-            self.nums.push(value)
-        } else {
-            self.nums.insert(new_index, value);
-        }
+        self.nums.insert(new_index, value);
     }
 
     fn find(&self, orig_index: usize) -> usize {
