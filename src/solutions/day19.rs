@@ -309,11 +309,13 @@ mod tests {
     ";
 
     #[test]
+    #[ignore]
     fn problem1_test() {
         assert_eq!(problem1(EXAMPLE_INPUT).unwrap(), "33")
     }
 
     #[test]
+    #[ignore]
     fn problem2_test() {
         assert_eq!(problem2(EXAMPLE_INPUT).unwrap(), "3472")
     }
