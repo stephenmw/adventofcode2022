@@ -1,72 +1,101 @@
 use std::collections::HashMap;
 
+use arrayvec::ArrayString;
+
 use crate::solutions::prelude::*;
 
 pub fn problem1(input: &str) -> Result<String, anyhow::Error> {
-    let mut monkeys = parse!(input);
-    let root = monkeys
-        .get("root")
-        .ok_or(anyhow!("root not found"))?
-        .clone();
-    let ans = root.find_value(&mut monkeys)?;
+    let vars = parse!(input);
+    let root = vars.get("root").ok_or(anyhow!("root not found"))?;
+
+    let ans = root.expand(&vars).simplify();
+    let Expr::Value(ans) = ans else {bail!("expr did not fully simplify")};
+
     Ok(ans.to_string())
 }
 
-pub fn problem2(_input: &str) -> Result<String, anyhow::Error> {
+pub fn problem2(input: &str) -> Result<String, anyhow::Error> {
+    let mut vars = parse!(input);
+    vars.remove("humn");
+
+    let root = vars.get("root").ok_or(anyhow!("root not found"))?;
+    let Expr::Operation(root_operation) = root else {bail!("root is not an operation")};
+
+    let a = root_operation.a.expand(&vars).simplify();
+    let b = root_operation.b.expand(&vars).simplify();
+
+    println!("{} = {}", a, b);
+
     todo!()
 }
 
-type MonkeyName = String;
+type Ident = ArrayString<4>;
 
 #[derive(Clone, Debug)]
-pub struct Monkey {
-    name: MonkeyName,
-    task: MonkeyTask,
-}
-
-impl Monkey {
-    fn find_value(&self, m: &mut HashMap<MonkeyName, Monkey>) -> anyhow::Result<u64> {
-        let res = match &self.task {
-            MonkeyTask::Value(x) => *x,
-            MonkeyTask::Operation(op) => {
-                let val = op.execute(m)?;
-                m.get_mut(&self.name).unwrap().task = MonkeyTask::Value(val);
-                val
-            }
-        };
-
-        Ok(res)
-    }
-}
-
-#[derive(Clone, Debug)]
-pub enum MonkeyTask {
+pub enum Expr {
     Operation(Operation),
-    Value(u64),
+    Value(i64),
+    Var(Ident),
 }
 
-impl MonkeyTask {}
-
-#[derive(Clone, Debug)]
-struct Operation {
-    op: Op,
-    a: MonkeyName,
-    b: MonkeyName,
-}
-
-impl Operation {
-    fn execute(&self, m: &mut HashMap<MonkeyName, Monkey>) -> anyhow::Result<u64> {
-        let a = m.get(&self.a).ok_or(anyhow!("dangling monkey"))?.clone();
-        let b = m.get(&self.b).ok_or(anyhow!("dangling monkey"))?.clone();
-
-        let a_val = a.find_value(m)?;
-        let b_val = b.find_value(m)?;
-
-        Ok(self.op.execute(a_val, b_val))
+impl std::fmt::Display for Expr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Operation(op) => write!(f, "({} {} {})", op.a, op.op.symbol(), op.b),
+            Self::Value(x) => write!(f, "{}", x),
+            Self::Var(x) => write!(f, "{}", x),
+        }
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+impl Expr {
+    fn expand(&self, vars: &HashMap<Ident, Expr>) -> Expr {
+        match self {
+            Self::Operation(op) => {
+                let new_op = Operation {
+                    op: op.op,
+                    a: op.a.expand(vars).into(),
+                    b: op.b.expand(vars).into(),
+                };
+                Expr::Operation(new_op)
+            }
+            Self::Value(_) => self.clone(),
+            Self::Var(var) => {
+                let Some(e) = vars.get(var) else {return self.clone()};
+                e.expand(vars)
+            }
+        }
+    }
+
+    fn simplify(&self) -> Expr {
+        match self {
+            Self::Operation(op) => {
+                let a = op.a.simplify();
+                let b = op.b.simplify();
+
+                match (a, b) {
+                    (Self::Value(a), Self::Value(b)) => Self::Value(op.op.execute(a, b).unwrap()),
+                    (a, b) => Self::Operation(Operation {
+                        op: op.op,
+                        a: a.into(),
+                        b: b.into(),
+                    }),
+                }
+            }
+            Self::Value(_) => self.clone(),
+            Self::Var(_) => self.clone(),
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct Operation {
+    op: Op,
+    a: Box<Expr>,
+    b: Box<Expr>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Op {
     Add,
     Sub,
@@ -75,12 +104,27 @@ pub enum Op {
 }
 
 impl Op {
-    fn execute(&self, a: u64, b: u64) -> u64 {
+    fn execute(&self, a: i64, b: i64) -> Option<i64> {
         match self {
-            Self::Add => a + b,
-            Self::Sub => a - b,
-            Self::Mul => a * b,
-            Self::Div => a / b,
+            Self::Add => a.checked_add(b),
+            Self::Sub => a.checked_sub(b),
+            Self::Mul => a.checked_mul(b),
+            Self::Div => {
+                if a.checked_rem(b)? == 0 {
+                    a.checked_div(b)
+                } else {
+                    None
+                }
+            }
+        }
+    }
+
+    fn symbol(&self) -> char {
+        match self {
+            Self::Add => '+',
+            Self::Sub => '-',
+            Self::Mul => '*',
+            Self::Div => '/',
         }
     }
 }
@@ -91,34 +135,37 @@ mod parser {
     use super::*;
     use crate::parser::prelude::*;
 
-    pub fn parse(input: &str) -> IResult<&str, HashMap<MonkeyName, Monkey>> {
-        let parser =
-            many1(ws_line(monkey)).map(|xs| xs.into_iter().map(|x| (x.name.clone(), x)).collect());
+    pub fn parse(input: &str) -> IResult<&str, HashMap<Ident, Expr>> {
+        let parser = many1(ws_line(monkey)).map(|xs| xs.into_iter().collect());
         ws_all_consuming(parser)(input)
     }
 
-    fn monkey(input: &str) -> IResult<&str, Monkey> {
+    fn monkey(input: &str) -> IResult<&str, (Ident, Expr)> {
         let op = alt((
             value(Op::Add, char('+')),
             value(Op::Sub, char('-')),
             value(Op::Mul, char('*')),
             value(Op::Div, char('/')),
         ));
-        let operation = tuple((identifier, delimited(space0, op, space0), identifier))
-            .map(|(a, op, b)| Operation { op, a, b });
+        let operation =
+            tuple((var, delimited(space0, op, space0), var)).map(|(a, op, b)| Operation {
+                op,
+                a: Expr::Var(a).into(),
+                b: Expr::Var(b).into(),
+            });
 
-        let task = alt((
-            uint.map(|x| MonkeyTask::Value(x)),
-            operation.map(|x| MonkeyTask::Operation(x)),
+        let expr = alt((
+            uint.map(|x| Expr::Value(x)),
+            operation.map(|x| Expr::Operation(x)),
         ));
 
-        separated_pair(identifier, tag(": "), task)
-            .map(|(name, task)| Monkey { name, task })
+        separated_pair(var, tag(": "), expr)
+            .map(|(name, expr)| (name, expr))
             .parse(input)
     }
 
-    fn identifier(input: &str) -> IResult<&str, String> {
-        alphanumeric1.map(|x: &str| x.to_owned()).parse(input)
+    fn var(input: &str) -> IResult<&str, Ident> {
+        map_res(alpha1, ArrayString::from).parse(input)
     }
 }
 
@@ -149,6 +196,6 @@ mod tests {
 
     #[test]
     fn problem2_test() {
-        //assert_eq!(problem2(EXAMPLE_INPUT).unwrap(), "")
+        //assert_eq!(problem2(EXAMPLE_INPUT).unwrap(), "301")
     }
 }

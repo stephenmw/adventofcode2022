@@ -7,7 +7,8 @@ pub mod prelude {
         branch::alt,
         bytes::complete::{is_a, tag, take_while},
         character::complete::{
-            alphanumeric1, anychar, char, digit1, line_ending, multispace0, one_of, space0, space1,
+            alpha1, alphanumeric1, anychar, char, digit1, line_ending, multispace0, one_of, space0,
+            space1,
         },
         combinator::{eof, into, map, map_res, opt, recognize, value, verify},
         error::ParseError,
