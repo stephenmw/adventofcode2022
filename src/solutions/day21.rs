@@ -24,9 +24,54 @@ pub fn problem2(input: &str) -> Result<String, anyhow::Error> {
     let a = root_op.a.expand(&vars).simplify();
     let b = root_op.b.expand(&vars).simplify();
 
-    println!("{} = {}", a, b);
+    let (rhs, lhs) = match (a, b) {
+        (rhs, Expr::Value(lhs)) => (rhs, lhs),
+        (Expr::Value(lhs), rhs) => (rhs, lhs),
+        _ => bail!("lhs or rhs must be a value"),
+    };
 
-    todo!()
+    let ans = isolate_var(&rhs, lhs)?;
+
+    Ok(ans.to_string())
+}
+
+fn isolate_var(mut rhs: &Expr, mut lhs: i64) -> anyhow::Result<i64> {
+    loop {
+        let op = match rhs {
+            Expr::Operation(op) => op,
+            Expr::Value(_) => bail!("no var in rhs"),
+            Expr::Var(_) => return Ok(lhs),
+        };
+
+        let (e, val) = match (op.a.as_ref(), op.b.as_ref()) {
+            (Expr::Value(v), b) => (b, v),
+            (a, Expr::Value(v)) => (a, v),
+            _ => bail!("rhs must have exactly one ident and be simplified"),
+        };
+
+        match op.op {
+            Op::Add => {
+                lhs -= val;
+            }
+            Op::Sub => {
+                if op.a.is_value() {
+                    lhs *= -1;
+                }
+                lhs += val;
+            }
+            Op::Mul => {
+                lhs /= val;
+            }
+            Op::Div => {
+                if !op.b.is_value() {
+                    bail!("cannot divide by expression with ident");
+                }
+                lhs *= val;
+            }
+        }
+
+        rhs = e;
+    }
 }
 
 type Ident = ArrayString<4>;
@@ -74,6 +119,14 @@ impl Expr {
             }
             Self::Value(_) => self.clone(),
             Self::Var(_) => self.clone(),
+        }
+    }
+
+    fn is_value(&self) -> bool {
+        if let Self::Value(_) = self {
+            true
+        } else {
+            false
         }
     }
 }
