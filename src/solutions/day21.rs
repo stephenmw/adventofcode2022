@@ -19,10 +19,10 @@ pub fn problem2(input: &str) -> Result<String, anyhow::Error> {
     vars.remove("humn");
 
     let root = vars.get("root").ok_or(anyhow!("root not found"))?;
-    let Expr::Operation(root_operation) = root else {bail!("root is not an operation")};
+    let Expr::Operation(root_op) = root else {bail!("root is not an operation")};
 
-    let a = root_operation.a.expand(&vars).simplify();
-    let b = root_operation.b.expand(&vars).simplify();
+    let a = root_op.a.expand(&vars).simplify();
+    let b = root_op.b.expand(&vars).simplify();
 
     println!("{} = {}", a, b);
 
@@ -36,16 +36,6 @@ pub enum Expr {
     Operation(Operation),
     Value(i64),
     Var(Ident),
-}
-
-impl std::fmt::Display for Expr {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Operation(op) => write!(f, "({} {} {})", op.a, op.op.symbol(), op.b),
-            Self::Value(x) => write!(f, "{}", x),
-            Self::Var(x) => write!(f, "{}", x),
-        }
-    }
 }
 
 impl Expr {
@@ -84,6 +74,16 @@ impl Expr {
             }
             Self::Value(_) => self.clone(),
             Self::Var(_) => self.clone(),
+        }
+    }
+}
+
+impl std::fmt::Display for Expr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Operation(op) => write!(f, "({} {} {})", op.a, op.op.symbol(), op.b),
+            Self::Value(x) => write!(f, "{}", x),
+            Self::Var(x) => write!(f, "{}", x),
         }
     }
 }
@@ -136,11 +136,11 @@ mod parser {
     use crate::parser::prelude::*;
 
     pub fn parse(input: &str) -> IResult<&str, HashMap<Ident, Expr>> {
-        let parser = many1(ws_line(monkey)).map(|xs| xs.into_iter().collect());
+        let parser = many1(ws_line(declaration)).map(|xs| xs.into_iter().collect());
         ws_all_consuming(parser)(input)
     }
 
-    fn monkey(input: &str) -> IResult<&str, (Ident, Expr)> {
+    fn declaration(input: &str) -> IResult<&str, (Ident, Expr)> {
         let op = alt((
             value(Op::Add, char('+')),
             value(Op::Sub, char('-')),
@@ -148,7 +148,7 @@ mod parser {
             value(Op::Div, char('/')),
         ));
         let operation =
-            tuple((var, delimited(space0, op, space0), var)).map(|(a, op, b)| Operation {
+            tuple((ident, delimited(space0, op, space0), ident)).map(|(a, op, b)| Operation {
                 op,
                 a: Expr::Var(a).into(),
                 b: Expr::Var(b).into(),
@@ -159,12 +159,10 @@ mod parser {
             operation.map(|x| Expr::Operation(x)),
         ));
 
-        separated_pair(var, tag(": "), expr)
-            .map(|(name, expr)| (name, expr))
-            .parse(input)
+        separated_pair(ident, tag(": "), expr).parse(input)
     }
 
-    fn var(input: &str) -> IResult<&str, Ident> {
+    fn ident(input: &str) -> IResult<&str, Ident> {
         map_res(alpha1, ArrayString::from).parse(input)
     }
 }
@@ -196,6 +194,6 @@ mod tests {
 
     #[test]
     fn problem2_test() {
-        //assert_eq!(problem2(EXAMPLE_INPUT).unwrap(), "301")
+        assert_eq!(problem2(EXAMPLE_INPUT).unwrap(), "301")
     }
 }
