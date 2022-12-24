@@ -82,7 +82,7 @@ pub struct Point {
 
 impl Point {
     pub fn new(x: usize, y: usize) -> Self {
-        Point { x: x, y: y }
+        Point { x, y }
     }
 
     pub fn next(&self, d: Direction) -> Option<Point> {
@@ -94,6 +94,15 @@ impl Point {
         };
 
         Some(p)
+    }
+
+    pub fn iter_adjacent(&self) -> impl Iterator<Item = Point> {
+        let p = *self;
+        Direction::iter().filter_map(move |d| p.next(d))
+    }
+
+    pub fn manhattan_distance(&self, other: &Self) -> usize {
+        (self.x.abs_diff(other.x)) + (self.y.abs_diff(other.y))
     }
 }
 
