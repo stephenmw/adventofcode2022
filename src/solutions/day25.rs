@@ -52,6 +52,10 @@ fn base5_to_snafu(xs: &[u8]) -> String {
         ret.push(ch)
     }
 
+    if carry == 1 {
+        ret.push('1');
+    }
+
     ret.chars().rev().collect()
 }
 
