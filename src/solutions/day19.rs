@@ -1,9 +1,10 @@
-use anyhow::Ok;
-use arrayvec::ArrayVec;
+use std::collections::BinaryHeap;
 
+use arrayvec::ArrayVec;
 use rayon::prelude::*;
 
 use crate::solutions::prelude::*;
+use crate::utils::HeapElement;
 
 pub fn problem1(input: &str) -> Result<String, anyhow::Error> {
     let blueprints = parse!(input);
@@ -36,60 +37,69 @@ fn simulate_blueprint(blueprint: &Blueprint, time: usize) -> usize {
             obsidian: 0,
             geode: 0,
         },
-        unaffordable_robots: blueprint.robot_costs.clone().into(),
     };
 
-    let mut frontier = vec![initial_state];
-    let mut max_geodes = 0;
+    let mut frontier = BinaryHeap::new();
+    frontier.push(HeapElement::from((
+        initial_state.high_mark(&blueprint),
+        initial_state,
+    )));
 
-    while let Some(mut state) = frontier.pop() {
-        state.remove_never_affordable_robots();
-
-        while state.time_remaining > 0 {
-            state.time_remaining -= 1;
-
-            let ready_robots = state.remove_affordable_robots();
-
-            state.resources.add(&state.robots);
-
-            for robot in ready_robots {
-                let type_ = robot.robot_type;
-                if type_ != Resource::Geode {
-                    if state.resources.get(type_)
-                        >= blueprint.max_needed.get(type_) * state.time_remaining
-                    {
-                        continue;
-                    }
-
-                    if state.robots.get(type_) >= blueprint.max_needed.get(type_) {
-                        continue;
-                    }
-                }
-
-                let mut new_state = state.clone();
-                new_state.buy(&robot).expect("robot should be affordable");
-                new_state.unaffordable_robots = blueprint.robot_costs.clone().into();
-                frontier.push(new_state);
-            }
-
-            // speed up time if no more unaffordable robots
-            if state.unaffordable_robots.is_empty() {
-                state.resources.geode += state.robots.geode * state.time_remaining;
-                state.time_remaining = 0;
-                break;
-            }
+    while let Some(state) = frontier.pop().map(|x| x.value) {
+        if state.time_remaining == 0 {
+            return state.resources.geode;
         }
 
-        max_geodes = max_geodes.max(state.resources.geode);
+        let mut robot_costs = ArrayVec::from(blueprint.robot_costs.clone());
+        robot_costs.retain(|c| {
+            c.robot_type == Resource::Geode
+                || state.robots.get(c.robot_type) < blueprint.max_needed.get(c.robot_type)
+        });
+
+        let mut resources = state.resources;
+
+        for time_remaining in (0..state.time_remaining).rev() {
+            let mut i = 0;
+            while i < robot_costs.len() {
+                if let Some(r) = resources.sub_resources(&robot_costs[i].resources) {
+                    let costs = robot_costs.swap_remove(i);
+                    let new_state = State {
+                        time_remaining,
+                        resources: r.add(&state.robots),
+                        robots: state.robots.add_resource(costs.robot_type, 1),
+                    };
+                    frontier.push(HeapElement::from((
+                        new_state.high_mark(&blueprint),
+                        new_state,
+                    )));
+                } else {
+                    i += 1;
+                }
+            }
+
+            resources = resources.add(&state.robots);
+        }
+
+        let new_state = State {
+            time_remaining: 0,
+            robots: state.robots,
+            resources,
+        };
+        frontier.push(HeapElement::from((
+            new_state.high_mark(&blueprint),
+            new_state,
+        )));
     }
 
-    max_geodes
+    unreachable!()
 }
+
+const NUM_ROBOT_TYPES: usize = 4;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Blueprint {
     id: usize,
-    robot_costs: [RobotCost; 4],
+    robot_costs: [RobotCost; NUM_ROBOT_TYPES],
     max_needed: ResourceState,
 }
 
@@ -107,55 +117,41 @@ enum Resource {
     Geode,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 struct State {
     time_remaining: usize,
     resources: ResourceState,
     robots: ResourceState,
-    unaffordable_robots: ArrayVec<RobotCost, 4>,
 }
 
 impl State {
-    fn buy(&mut self, robot: &RobotCost) -> anyhow::Result<()> {
-        self.resources = self
-            .resources
-            .sub_resources(&robot.resources)
-            .ok_or(anyhow!("not enough minerals"))?;
-        *self.robots.get_mut(robot.robot_type) += 1;
-        Ok(())
-    }
-
-    fn remove_affordable_robots(&mut self) -> ArrayVec<RobotCost, 4> {
-        let mut ret = ArrayVec::new();
-        let mut i = 0;
-        while i < self.unaffordable_robots.len() {
-            if self
-                .resources
-                .is_affordable(&self.unaffordable_robots[i].resources)
-            {
-                ret.push(self.unaffordable_robots.swap_remove(i));
-            } else {
-                i += 1;
-            }
-        }
-
-        ret
-    }
-
-    fn remove_never_affordable_robots(&mut self) {
-        let mut i = 0;
-        while i < self.unaffordable_robots.len() {
-            let never_affordable = self.unaffordable_robots[i]
-                .resources
+    // A number guaranteed to be higher than geodes possible on this path.
+    fn high_mark(&self, blueprint: &Blueprint) -> usize {
+        let mut resources = [self.resources; NUM_ROBOT_TYPES];
+        let mut robots = self.robots;
+        for _ in 0..self.time_remaining {
+            let additional_robots = blueprint
+                .robot_costs
                 .iter()
-                .any(|(r, _)| self.robots.get(*r) == 0);
+                .enumerate()
+                .filter_map(|(i, cost)| {
+                    let r = &mut resources[i];
+                    if let Some(new_r) = r.sub_resources(&cost.resources) {
+                        *r = new_r;
+                        Some(cost.robot_type)
+                    } else {
+                        None
+                    }
+                })
+                .fold(ResourceState::default(), |acc, resource| {
+                    acc.add_resource(resource, 1)
+                });
 
-            if never_affordable {
-                self.unaffordable_robots.swap_remove(i);
-            } else {
-                i += 1;
-            }
+            resources.iter_mut().for_each(|x| *x = x.add(&robots));
+            robots = robots.add(&additional_robots);
         }
+
+        resources[0].geode
     }
 }
 
@@ -186,16 +182,6 @@ impl ResourceState {
         }
     }
 
-    fn is_affordable<'a>(&self, iter: impl IntoIterator<Item = &'a (Resource, usize)>) -> bool {
-        for &(resource, amount) in iter {
-            if self.get(resource) < amount {
-                return false;
-            }
-        }
-
-        true
-    }
-
     fn sub_resources<'a>(
         &self,
         iter: impl IntoIterator<Item = &'a (Resource, usize)>,
@@ -210,11 +196,19 @@ impl ResourceState {
         Some(ret)
     }
 
-    fn add(&mut self, other: &Self) {
-        self.ore += other.ore;
-        self.clay += other.clay;
-        self.obsidian += other.obsidian;
-        self.geode += other.geode;
+    fn add(&self, other: &Self) -> Self {
+        Self {
+            ore: self.ore + other.ore,
+            clay: self.clay + other.clay,
+            obsidian: self.obsidian + other.obsidian,
+            geode: self.geode + other.geode,
+        }
+    }
+
+    fn add_resource(&self, resource: Resource, amount: usize) -> Self {
+        let mut ret = *self;
+        *ret.get_mut(resource) += amount;
+        ret
     }
 }
 
@@ -309,13 +303,11 @@ mod tests {
     ";
 
     #[test]
-    #[ignore]
     fn problem1_test() {
         assert_eq!(problem1(EXAMPLE_INPUT).unwrap(), "33")
     }
 
     #[test]
-    #[ignore]
     fn problem2_test() {
         assert_eq!(problem2(EXAMPLE_INPUT).unwrap(), "3472")
     }
