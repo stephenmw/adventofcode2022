@@ -1,5 +1,7 @@
 use std::collections::hash_map::Entry;
-use std::collections::HashMap;
+//use std::collections::HashMap;
+
+use ahash::HashMap;
 
 use crate::grid::{Direction, Grid, Point};
 use crate::solutions::prelude::*;
@@ -33,7 +35,7 @@ pub fn problem2(input: &str) -> Result<String, anyhow::Error> {
 fn find_periodic(directions: &[Direction]) -> (usize, usize) {
     let mut dropper = Dropper::new(directions);
 
-    let mut seen = HashMap::new();
+    let mut seen = HashMap::default();
 
     for i in 0.. {
         dropper.drop_rock();

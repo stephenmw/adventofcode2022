@@ -1,7 +1,8 @@
 use std::cmp::Reverse;
-use std::collections::{BinaryHeap, HashSet};
+use std::collections::BinaryHeap;
 use std::fmt::Write;
 
+use ahash::HashSet;
 use bitflags::bitflags;
 
 use crate::grid::{Direction, Grid, Point};
@@ -42,7 +43,7 @@ fn shortest_path(
         },
     ));
 
-    let mut seen = HashSet::new();
+    let mut seen = HashSet::default();
     seen.insert((start, start_minute));
 
     while let Some((_, state)) = frontier.pop() {

@@ -1,4 +1,6 @@
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::VecDeque;
+
+use ahash::{HashMap, HashSet};
 
 use crate::solutions::prelude::*;
 
@@ -40,7 +42,7 @@ fn simulate(elves: &mut HashSet<Point>, max_iterations: usize) -> usize {
     ]);
 
     // Proposal of Value -> Key. If value is None, Key is blocked.
-    let mut proposals: HashMap<Point, Option<Point>> = HashMap::new();
+    let mut proposals: HashMap<Point, Option<Point>> = HashMap::default();
 
     for i in 0..max_iterations {
         proposals.drain();
