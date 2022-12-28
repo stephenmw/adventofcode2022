@@ -37,10 +37,16 @@ impl List {
 
     fn move_number(&mut self, orig_index: usize) {
         let index = self.find(orig_index);
-        let value = self.nums.remove(index);
-        let new_index = add_offset(index, value.1, self.nums.len());
+        let value = self.nums[index];
+        let new_index = add_offset(index, value.1, self.nums.len() - 1);
 
-        self.nums.insert(new_index, value);
+        if index < new_index {
+            self.nums.copy_within((index + 1)..=new_index, index);
+        } else {
+            self.nums.copy_within(new_index..index, new_index + 1);
+        }
+
+        self.nums[new_index] = value;
     }
 
     fn find(&self, orig_index: usize) -> usize {
