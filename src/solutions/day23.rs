@@ -1,39 +1,35 @@
-use std::collections::VecDeque;
+use std::{
+    collections::VecDeque,
+    fmt::{Display, Write},
+};
 
-use ahash::{HashMap, HashSet};
+use ahash::HashMap;
 
 use crate::solutions::prelude::*;
 
 pub fn problem1(input: &str) -> Result<String, anyhow::Error> {
-    let mut elves = parse!(input);
-    simulate(&mut elves, 10);
-    Ok(empty_spaces(&elves).to_string())
+    let elves = parse!(input);
+
+    let (_, mut grid) = simulate(&elves, 10);
+    grid.trim();
+    let ans = grid.area() - elves.len();
+
+    Ok(ans.to_string())
 }
 
 pub fn problem2(input: &str) -> Result<String, anyhow::Error> {
     let mut elves = parse!(input);
-    let ans = simulate(&mut elves, usize::MAX);
+    let (ans, _) = simulate(&mut elves, usize::MAX);
     Ok(ans.to_string())
 }
 
-fn empty_spaces(elves: &HashSet<Point>) -> usize {
-    let (min_x, max_x, min_y, max_y) = elves.iter().fold(
-        (isize::MAX, isize::MIN, isize::MAX, isize::MIN),
-        |(min_x, max_x, min_y, max_y), p| {
-            (
-                min_x.min(p.x),
-                max_x.max(p.x),
-                min_y.min(p.y),
-                max_y.max(p.y),
-            )
-        },
-    );
+fn simulate(elves: &[Point], max_iterations: usize) -> (usize, ExpandableGrid<bool>) {
+    let mut grid = ExpandableGrid::default();
+    for p in elves {
+        *grid.get_mut_or_expand(p) = true;
+    }
+    grid.trim();
 
-    let area = (max_x - min_x + 1) * (max_y - min_y + 1);
-    area as usize - elves.len()
-}
-
-fn simulate(elves: &mut HashSet<Point>, max_iterations: usize) -> usize {
     let mut directions = VecDeque::from(vec![
         Direction::North,
         Direction::South,
@@ -46,37 +42,40 @@ fn simulate(elves: &mut HashSet<Point>, max_iterations: usize) -> usize {
 
     for i in 0..max_iterations {
         proposals.drain();
-        for elf in elves.iter() {
-            if elf.adjacent().all(|p| !elves.contains(&p)) {
+        let elves = grid
+            .iter()
+            .filter_map(|(p, v)| if *v { Some(p) } else { None });
+        for elf in elves {
+            if elf.adjacent().all(|p| !grid.get(&p).map_or(false, |&x| x)) {
                 continue;
             }
 
             let Some(d) = directions
                 .iter()
-                .find(|&d| !elf.adjacent_direction(*d).any(|p| elves.contains(&p)))
+                .find(|&d| !elf.adjacent_direction(*d).any(|p| grid.get(&p).map_or(false, |&x| x)))
                 .copied() else {continue};
 
             proposals
                 .entry(elf.step(d))
                 .and_modify(|e| *e = None)
-                .or_insert(Some(*elf));
+                .or_insert(Some(elf));
         }
 
         if proposals.values().all(|x| x.is_none()) {
-            return i + 1;
+            return (i + 1, grid);
         }
 
         for (to, from) in proposals.iter() {
             if let Some(from) = from {
-                elves.remove(from);
-                elves.insert(*to);
+                *grid.get_mut(from).unwrap() = false;
+                *grid.get_mut_or_expand(to) = true;
             }
         }
 
         directions.rotate_left(1);
     }
 
-    max_iterations
+    (max_iterations, grid)
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
@@ -127,11 +126,185 @@ pub enum Direction {
     East,
 }
 
+#[derive(Clone, Debug, Default)]
+struct ExpandableGrid<T> {
+    cells: VecDeque<VecDeque<T>>,
+    x_offset: isize,
+    y_offset: isize,
+}
+
+impl<T: Default + Clone + PartialEq> ExpandableGrid<T> {
+    pub fn get(&self, p: &Point) -> Option<&T> {
+        let x: usize = (p.x + self.x_offset as isize).try_into().ok()?;
+        let y: usize = (p.y + self.y_offset as isize).try_into().ok()?;
+
+        self.cells.get(y)?.get(x)
+    }
+
+    pub fn get_mut(&mut self, p: &Point) -> Option<&mut T> {
+        let x: usize = (p.x + self.x_offset).try_into().ok()?;
+        let y: usize = (p.y + self.y_offset).try_into().ok()?;
+
+        self.cells.get_mut(y)?.get_mut(x)
+    }
+
+    pub fn get_mut_or_expand(&mut self, p: &Point) -> &mut T {
+        let y = {
+            let translated_y = p.y + self.y_offset;
+            if translated_y >= 0 {
+                translated_y as usize
+            } else {
+                let row_length = self.row_length();
+                for _ in 0..translated_y.abs() {
+                    self.cells
+                        .push_front(new_vecdeque_with(row_length, T::default));
+                }
+
+                self.y_offset += translated_y.abs();
+
+                0
+            }
+        };
+
+        let x = {
+            let translated_x = p.x + self.x_offset;
+            if translated_x >= 0 {
+                translated_x as usize
+            } else {
+                for row in self.cells.iter_mut() {
+                    for _ in 0..translated_x.abs() {
+                        row.push_front(T::default());
+                    }
+                }
+
+                self.x_offset += translated_x.abs();
+
+                0
+            }
+        };
+
+        let row_length = self.row_length();
+
+        if y >= self.cells.len() {
+            self.cells
+                .resize_with(y + 1, || VecDeque::from(vec![T::default(); row_length]));
+        }
+
+        if x >= row_length {
+            for row in self.cells.iter_mut() {
+                row.resize_with(x + 1, T::default);
+            }
+        }
+
+        self.get_mut(p).unwrap()
+    }
+
+    fn row_length(&self) -> usize {
+        self.cells.front().map(|row| row.len()).unwrap_or(0)
+    }
+
+    pub fn trim(&mut self) {
+        let default = T::default();
+
+        while self
+            .cells
+            .front()
+            .map(|row| row.iter().all(|cell| cell == &default))
+            .unwrap_or(false)
+        {
+            self.cells.pop_front();
+            self.y_offset -= 1;
+        }
+
+        while self
+            .cells
+            .back()
+            .map(|row| row.iter().all(|cell| cell == &default))
+            .unwrap_or(false)
+        {
+            self.cells.pop_back();
+        }
+
+        let is_empty_column = |cells: &VecDeque<VecDeque<T>>, column| {
+            cells
+                .iter()
+                .map(move |row| &row[column])
+                .all(|cell| cell == &default)
+        };
+
+        while is_empty_column(&self.cells, 0) {
+            self.cells.iter_mut().for_each(|x| {
+                x.pop_front();
+            });
+            self.x_offset -= 1;
+        }
+
+        while is_empty_column(&self.cells, self.row_length() - 1) {
+            self.cells.iter_mut().for_each(|x| {
+                x.pop_back();
+            });
+        }
+    }
+
+    pub fn area(&self) -> usize {
+        self.cells.len() * self.row_length()
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = (Point, &T)> {
+        self.cells.iter().enumerate().flat_map(move |(y, row)| {
+            row.iter().enumerate().map(move |(x, cell)| {
+                (
+                    Point::new(
+                        x as isize + -1 * self.x_offset,
+                        y as isize + -1 * self.y_offset,
+                    ),
+                    cell,
+                )
+            })
+        })
+    }
+}
+
+impl Display for ExpandableGrid<bool> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut rows = self.cells.iter();
+        let Some(first) = rows.next() else {
+            return write!(f, "<Empty Grid>");
+        };
+
+        fn write_row(f: &mut std::fmt::Formatter<'_>, row: &VecDeque<bool>) -> std::fmt::Result {
+            for cell in row {
+                match cell {
+                    true => f.write_char('#')?,
+                    false => f.write_char('.')?,
+                };
+            }
+
+            Ok(())
+        }
+
+        write_row(f, first)?;
+
+        for row in rows {
+            f.write_char('\n')?;
+            write_row(f, row)?;
+        }
+
+        Ok(())
+    }
+}
+
+fn new_vecdeque_with<T>(len: usize, generator: impl FnMut() -> T) -> VecDeque<T> {
+    let mut ret = VecDeque::with_capacity(len);
+    ret.resize_with(len, generator);
+    ret
+}
+
 mod parser {
     use super::*;
     use crate::parser::prelude::*;
 
-    pub fn parse(input: &str) -> IResult<&str, HashSet<Point>> {
+    pub fn parse(input: &str) -> IResult<&str, Vec<Point>> {
         let cell = alt((value(false, char('.')), value(true, char('#'))));
         let row = ws_line(many1(cell));
         let graph = many1(row).map(|graph| {
@@ -144,7 +317,7 @@ mod parser {
                         .filter(|(_, is_elf)| *is_elf)
                         .map(move |(j, _)| Point::new(j as isize, i as isize))
                 })
-                .collect::<HashSet<_>>()
+                .collect::<Vec<_>>()
         });
 
         ws_all_consuming(graph)(input)
