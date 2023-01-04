@@ -100,16 +100,22 @@ impl BlizzardValley {
 
         let end_y = grid.cells.len() - 1;
 
-        let x_len = grid.cells.first().unwrap().len() - 2;
-        let y_len = grid.cells.len() - 2;
-
         let mut ret = BlizzardValley {
             blizzard_locations: vec![grid],
             start: Point::new(start_x, 0),
             end: Point::new(end_x, end_y),
         };
 
-        ret.grow(x_len * y_len - 1);
+        loop {
+            let cur = ret.blizzard_locations.last().unwrap();
+            let next = Self::step_blizzard(cur);
+            if next != ret.blizzard_locations[0] {
+                ret.blizzard_locations.push(next);
+            } else {
+                break;
+            }
+        }
+
         ret
     }
 
@@ -120,14 +126,6 @@ impl BlizzardValley {
 
     fn repeat_interval(&self) -> usize {
         self.blizzard_locations.len()
-    }
-
-    fn grow(&mut self, target_time: usize) {
-        let needed = target_time + 1 - self.blizzard_locations.len();
-        for _ in 0..needed {
-            let cur = self.blizzard_locations.last().unwrap();
-            self.blizzard_locations.push(Self::step_blizzard(cur));
-        }
     }
 
     fn step_blizzard(old: &Grid<Cell>) -> Grid<Cell> {
