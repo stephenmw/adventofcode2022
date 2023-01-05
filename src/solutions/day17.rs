@@ -1,9 +1,8 @@
 use std::collections::hash_map::Entry;
-//use std::collections::HashMap;
 
 use ahash::HashMap;
 
-use crate::grid::{Direction, Grid, Point};
+use crate::grid::{Direction, Point};
 use crate::solutions::prelude::*;
 
 pub fn problem1(input: &str) -> Result<String, anyhow::Error> {
@@ -32,6 +31,44 @@ pub fn problem2(input: &str) -> Result<String, anyhow::Error> {
     Ok(ans.to_string())
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+struct Row(u8);
+
+impl Row {
+    const ALL: Self = Self(!(1 << 7));
+
+    fn get(&self, i: usize) -> bool {
+        self.0 & (1 << i) != 0
+    }
+
+    fn set(&mut self, i: usize) {
+        self.0 = self.0 | (1 << i)
+    }
+
+    fn set_from(&mut self, other: &Self) {
+        self.0 |= other.0
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+struct Grid {
+    cells: Vec<Row>,
+}
+
+impl Grid {
+    fn get(&self, p: &Point) -> bool {
+        self.cells.get(p.y).map(|row| row.get(p.x)).unwrap_or(false)
+    }
+
+    fn set_or_expand(&mut self, p: &Point) {
+        if p.y >= self.cells.len() {
+            self.cells.resize_with(p.y + 1, Row::default);
+        }
+
+        self.cells[p.y].set(p.x);
+    }
+}
+
 fn find_periodic(directions: &[Direction]) -> (usize, usize) {
     let mut dropper = Dropper::new(directions);
 
@@ -39,9 +76,7 @@ fn find_periodic(directions: &[Direction]) -> (usize, usize) {
 
     for i in 0.. {
         dropper.drop_rock();
-        let mut d = dropper.clone();
-        d.canonicalize();
-        match seen.entry(d) {
+        match seen.entry(dropper.state()) {
             Entry::Occupied(e) => {
                 return (*e.get(), i);
             }
@@ -54,30 +89,23 @@ fn find_periodic(directions: &[Direction]) -> (usize, usize) {
     unreachable!()
 }
 
-fn head(grid: &Grid<bool>) -> usize {
-    let mut seen = vec![false; 7];
-    let mut last_row = 0;
-    for (i, row) in grid.cells.iter().enumerate().rev() {
-        for (i, b) in row.iter().enumerate() {
-            if *b {
-                seen[i] = true;
-            }
-        }
-
-        if seen.iter().all(|x| *x) {
-            last_row = i;
-            break;
+fn head(grid: &[Row]) -> usize {
+    let mut seen = Row::default();
+    for (i, row) in grid.iter().enumerate().rev() {
+        seen.set_from(row);
+        if seen == Row::ALL {
+            return i;
         }
     }
 
-    last_row
+    0
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug)]
 struct Dropper<'a> {
     directions: &'a [Direction],
 
-    grid: Grid<bool>,
+    grid: Grid,
     direction_index: usize,
     shape: usize,
 }
@@ -86,7 +114,7 @@ impl<'a> Dropper<'a> {
     fn new(directions: &'a [Direction]) -> Self {
         Dropper {
             directions,
-            grid: Grid::new(Vec::new()),
+            grid: Grid::default(),
             direction_index: 0,
             shape: 0,
         }
@@ -104,12 +132,13 @@ impl<'a> Dropper<'a> {
         self.grid.cells.len()
     }
 
-    fn canonicalize(&mut self) {
-        self.shape %= SHAPES.len();
-        self.direction_index %= self.directions.len();
-
-        let first_head_row = head(&self.grid);
-        self.grid.cells.drain(..first_head_row);
+    fn state(&self) -> (Vec<Row>, usize, usize) {
+        let first_head_row = head(&self.grid.cells);
+        (
+            self.grid.cells[first_head_row..].to_vec(),
+            self.shape % SHAPES.len(),
+            self.direction_index % self.directions.len(),
+        )
     }
 
     fn drop_rock(&mut self) {
@@ -125,7 +154,7 @@ impl<'a> Dropper<'a> {
                 let overlaps = shape
                     .iter()
                     .map(|&x| add_point(next_cur, x))
-                    .any(|p| self.grid.get(p).cloned().unwrap_or(false) || p.x > 6);
+                    .any(|p| self.grid.get(&p) || p.x > 6);
                 if !overlaps {
                     cur = next_cur;
                 }
@@ -136,7 +165,7 @@ impl<'a> Dropper<'a> {
             let overlaps = shape
                 .iter()
                 .map(|&x| add_point(next_cur, x))
-                .any(|p| self.grid.get(p).cloned().unwrap_or(false));
+                .any(|p| self.grid.get(&p));
             if !overlaps {
                 cur = next_cur;
             } else {
@@ -147,7 +176,7 @@ impl<'a> Dropper<'a> {
         shape
             .iter()
             .map(|&x| add_point(cur, x))
-            .for_each(|p| *self.grid.get_mut_or_expand(p) = true);
+            .for_each(|p| self.grid.set_or_expand(&p));
     }
 }
 

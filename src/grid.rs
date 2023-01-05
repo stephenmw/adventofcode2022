@@ -34,22 +34,6 @@ impl<T> Grid<T> {
     }
 }
 
-impl<T: Default> Grid<T> {
-    pub fn get_mut_or_expand(&mut self, p: Point) -> &mut T {
-        if p.y >= self.cells.len() {
-            self.cells.resize_with(p.y + 1, Vec::new);
-        }
-
-        let row = &mut self.cells[p.y];
-
-        if p.x >= row.len() {
-            row.resize_with(p.x + 1, T::default);
-        }
-
-        &mut row[p.x]
-    }
-}
-
 impl<T> From<Vec<Vec<T>>> for Grid<T> {
     fn from(cells: Vec<Vec<T>>) -> Self {
         Self::new(cells)
